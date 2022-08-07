@@ -9,6 +9,7 @@ import numpy as np
 from tqdm import tqdm
 import random
 import json
+import config
 
 def get_loader(transform,
                mode='train',
@@ -20,7 +21,7 @@ def get_loader(transform,
                unk_word="<unk>",
                vocab_from_file=True,
                num_workers=0,
-               cocoapi_loc='/opt'):
+               cocoapi_loc=config.DATA_DIR):
     """Returns the data loader.
     Args:
       transform: Image transform.
@@ -43,14 +44,14 @@ def get_loader(transform,
     # Based on mode (train, val, test), obtain img_folder and annotations_file.
     if mode == 'train':
         if vocab_from_file==True: assert os.path.exists(vocab_file), "vocab_file does not exist.  Change vocab_from_file to False to create vocab_file."
-        img_folder = os.path.join(cocoapi_loc, 'cocoapi/images/train2014/')
-        annotations_file = os.path.join(cocoapi_loc, 'cocoapi/annotations/captions_train2014.json')
+        img_folder = os.path.join(cocoapi_loc, 'images/train2014/')
+        annotations_file = os.path.join(cocoapi_loc, 'annotations/captions_train2014.json')
     if mode == 'test':
         assert batch_size==1, "Please change batch_size to 1 if testing your model."
         assert os.path.exists(vocab_file), "Must first generate vocab.pkl from training data."
         assert vocab_from_file==True, "Change vocab_from_file to True."
-        img_folder = os.path.join(cocoapi_loc, 'cocoapi/images/test2014/')
-        annotations_file = os.path.join(cocoapi_loc, 'cocoapi/annotations/image_info_test2014.json')
+        img_folder = os.path.join(cocoapi_loc, 'images/test2014/')
+        annotations_file = os.path.join(cocoapi_loc, 'annotations/image_info_test2014.json')
 
     # COCO caption dataset.
     dataset = CoCoDataset(transform=transform,
@@ -144,6 +145,15 @@ class CoCoDataset(data.Dataset):
         all_indices = np.where([self.caption_lengths[i] == sel_length for i in np.arange(len(self.caption_lengths))])[0]
         indices = list(np.random.choice(all_indices, size=self.batch_size))
         return indices
+
+    def encode_caption(self, caption):
+        sample_tokens = nltk.tokenize.word_tokenize(str(caption).lower())
+        caption_tokens = []
+
+        caption_tokens.append(self.vocab(self.vocab.start_word))
+        caption_tokens.extend([self.vocab(token) for token in sample_tokens])
+        caption_tokens.append(self.vocab(self.vocab.end_word))
+        return caption_tokens
 
     def __len__(self):
         if self.mode == 'train':
