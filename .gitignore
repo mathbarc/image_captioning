@@ -1,2 +1,5 @@
 __pycache__
 models
+nltk_data/
+training_log.txt
+vocab.pkl

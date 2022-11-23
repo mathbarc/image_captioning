@@ -33,28 +33,45 @@ class DecoderRNN(nn.Module):
         self.num_layers = num_layers
 
         self.embed = nn.Embedding(self.vocab_size, self.embed_size)
-        self.rnn = nn.LSTM(self.embed_size, self.hidden_size, self.num_layers, batch_first=True)
+        self.rnn = nn.LSTM(input_size = self.embed_size, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first=True)
         self.linear = nn.Linear(self.hidden_size, self.vocab_size)
+        # self.out_activation = nn.Softmax(self.vocab_size)
     
     def forward(self, features, captions):
-        if(features.size()[1]==self.embed_size):
-            x = features
-        else:
-            x = self.embed(features)
-        cap = self.embed(captions)
-        x, captions = self.rnn(x, cap)
-        x = nn.functional.softmax(self.linear(x))
-        return x, captions
+        captions = captions[:,:-1]
+        batch_size = features.size()[0]
+        state = self.init_hidden(batch_size)
+        embeds = self.embed(captions)
+        inputs = torch.cat((features.unsqueeze(dim=1),embeds), dim=1)
+        
+        x, state = self.rnn(inputs, state)
+        x = self.linear(x)
+        # x = self.out_activation(x)
+        
+        return x
 
-    def sample(self, inputs, states=None, max_len=20):
+    def sample(self, inputs, max_len=20):
         " accepts pre-processed image tensor (inputs) and returns predicted sentence (list of token ids of length max_len) "
-        if states is None:
-            states = self.init_hidden(1)
-        features = inputs
+        
         tokens = []
+        batch_size = inputs.size()[0]
+        states = self.init_hidden(batch_size)
+        
+        
         for i in range(max_len):
-            outVector, states = self.forward(features, states)
-            tokens.append(numpy.argmax(outVector))
+            print(inputs.shape)
+            outVector, states = self.rnn(inputs, states)
+            outVector = self.linear(outVector)
+            # outVector = self.out_activation(outVector)
+            _, max_idx = torch.max(outVector, dim=2)
+            token = max_idx.cpu().numpy()[0].item()
+            tokens.append(token)
+            if max_idx == 1:
+                break
+
+            inputs = self.embed(max_idx)
+            # inputs = inputs.unsqueeze(1)
+            
 
         return tokens
 
@@ -62,6 +79,11 @@ class DecoderRNN(nn.Module):
     def init_hidden(self, batch_size):
         # This method generates the first hidden state of zeros which we'll use in the forward pass
         # We'll send the tensor holding the hidden state to the device we specified earlier as well
-        h = torch.zeros(self.num_layers, batch_size, self.hidden_size)
         c = torch.zeros(self.num_layers, batch_size, self.hidden_size)
-        return h, c
+        h = torch.zeros(self.num_layers, batch_size, self.hidden_size)
+
+        if torch.cuda.is_available():
+            h = h.to("cuda")
+            c = c.to("cuda")
+        
+        return h,c

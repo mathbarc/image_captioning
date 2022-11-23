@@ -3,7 +3,8 @@ import os
 import torch
 import torch.utils.data as data
 from vocabulary import Vocabulary
-from PIL import Image
+import skimage.io as io
+import cv2
 from pycocotools.coco import COCO
 import numpy as np
 from tqdm import tqdm
@@ -21,7 +22,8 @@ def get_loader(transform,
                unk_word="<unk>",
                vocab_from_file=True,
                num_workers=0,
-               cocoapi_loc=config.DATA_DIR):
+               cocoapi_loc=config.DATA_DIR, 
+               download_directly=False):
     """Returns the data loader.
     Args:
       transform: Image transform.
@@ -64,7 +66,8 @@ def get_loader(transform,
                           unk_word=unk_word,
                           annotations_file=annotations_file,
                           vocab_from_file=vocab_from_file,
-                          img_folder=img_folder)
+                          img_folder=img_folder,
+                          download_directly=download_directly)
 
     if mode == 'train':
         # Randomly sample a caption length, and sample indices with that length.
@@ -88,13 +91,14 @@ def get_loader(transform,
 class CoCoDataset(data.Dataset):
     
     def __init__(self, transform, mode, batch_size, vocab_threshold, vocab_file, start_word, 
-        end_word, unk_word, annotations_file, vocab_from_file, img_folder):
+        end_word, unk_word, annotations_file, vocab_from_file, img_folder, download_directly):
         self.transform = transform
         self.mode = mode
         self.batch_size = batch_size
         self.vocab = Vocabulary(vocab_threshold, vocab_file, start_word,
             end_word, unk_word, annotations_file, vocab_from_file)
         self.img_folder = img_folder
+        self.download_directly = download_directly
         if self.mode == 'train':
             self.coco = COCO(annotations_file)
             self.ids = list(self.coco.anns.keys())
@@ -104,6 +108,8 @@ class CoCoDataset(data.Dataset):
         else:
             test_info = json.loads(open(annotations_file).read())
             self.paths = [item['file_name'] for item in test_info['images']]
+            # self.coco = COCO(annotations_file)
+            # self.ids = list(self.coco.anns.keys())
         
     def __getitem__(self, index):
         # obtain image and caption if in training mode
@@ -111,10 +117,14 @@ class CoCoDataset(data.Dataset):
             ann_id = self.ids[index]
             caption = self.coco.anns[ann_id]['caption']
             img_id = self.coco.anns[ann_id]['image_id']
-            path = self.coco.loadImgs(img_id)[0]['file_name']
 
+            if self.download_directly:
+                url = self.coco.loadImgs(img_id)[0]['coco_url']
+                image = io.imread(url)
+            else:
+                path = self.coco.loadImgs(img_id)[0]['file_name']
+                image = cv2.imread(os.path.join(self.img_folder, path))
             # Convert image to tensor and pre-process using transform
-            image = Image.open(os.path.join(self.img_folder, path)).convert('RGB')
             image = self.transform(image)
 
             # Convert caption to tensor of word ids.
@@ -131,14 +141,24 @@ class CoCoDataset(data.Dataset):
         # obtain image if in test mode
         else:
             path = self.paths[index]
+            image = cv2.imread(os.path.join(self.img_folder, path))
 
-            # Convert image to tensor and pre-process using transform
-            PIL_image = Image.open(os.path.join(self.img_folder, path)).convert('RGB')
-            orig_image = np.array(PIL_image)
-            image = self.transform(PIL_image)
+            # ann_id = self.ids[index]
+            # img_id = self.coco.anns[ann_id]['image_id']
+
+            # # Convert image to tensor and pre-process using transform
+            # if self.download_directly:
+            #     url = self.coco.loadImgs(img_id)[0]['coco_url']
+            #     image = io.imread(url)
+            # else:
+            #     path = self.coco.loadImgs(img_id)[0]['file_name']
+            #     image = cv2.imread(os.path.join(self.img_folder, path))
+            
+            transformed_image = self.transform(image)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             # return original image and pre-processed image tensor
-            return orig_image, image
+            return image, transformed_image
 
     def get_train_indices(self):
         sel_length = np.random.choice(self.caption_lengths)
@@ -160,3 +180,31 @@ class CoCoDataset(data.Dataset):
             return len(self.ids)
         else:
             return len(self.paths)
+
+if __name__=="__main__":
+
+    from torchvision import transforms
+
+    transform_train = transforms.Compose([ 
+    transforms.ToTensor(),
+    transforms.Resize(256),                          # smaller edge of image resized to 256
+    transforms.RandomCrop(224),                      # get 224x224 crop from random location
+    transforms.RandomHorizontalFlip(),               # horizontally flip image with probability=0.5
+    transforms.Normalize((0.485, 0.456, 0.406),      # normalize image for pre-trained model
+                         (0.229, 0.224, 0.225))])
+
+    # Set the minimum word count threshold.
+    vocab_threshold = 5
+
+    # Specify the batch size.
+    batch_size = 10
+
+    data_loader = get_loader(transform=transform_train,
+                         mode='train',
+                         batch_size=batch_size,
+                         vocab_from_file=True)
+
+    images, captions = next(iter(data_loader))
+    
+    print('images.shape:', images.shape)
+    print('captions.shape:', captions.shape)

@@ -36,7 +36,7 @@ class Vocabulary(object):
 
     def get_vocab(self):
         """Load the vocabulary from file OR build the vocabulary from scratch."""
-        if os.path.exists(self.vocab_file) & self.vocab_from_file:
+        if os.path.exists(self.vocab_file) and self.vocab_from_file:
             with open(self.vocab_file, 'rb') as f:
                 vocab = pickle.load(f)
                 self.word2idx = vocab.word2idx
