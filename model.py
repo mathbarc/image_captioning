@@ -59,7 +59,6 @@ class DecoderRNN(nn.Module):
         
         
         for i in range(max_len):
-            print(inputs.shape)
             outVector, states = self.rnn(inputs, states)
             outVector = self.linear(outVector)
             # outVector = self.out_activation(outVector)
