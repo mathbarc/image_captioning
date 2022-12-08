@@ -4,6 +4,8 @@ import os.path
 from pycocotools.coco import COCO
 from collections import Counter
 
+import util
+
 class Vocabulary(object):
 
     def __init__(self,
@@ -37,15 +39,15 @@ class Vocabulary(object):
     def get_vocab(self):
         """Load the vocabulary from file OR build the vocabulary from scratch."""
         if os.path.exists(self.vocab_file) and self.vocab_from_file:
-            with open(self.vocab_file, 'rb') as f:
-                vocab = pickle.load(f)
-                self.word2idx = vocab.word2idx
-                self.idx2word = vocab.idx2word
-            print('Vocabulary successfully loaded from vocab.pkl file!')
+            vocab = util.load_vocab(self.vocab_file)                
+            self.word2idx = vocab.word2idx
+            self.idx2word = vocab.idx2word
         else:
             self.build_vocab()
             with open(self.vocab_file, 'wb') as f:
                 pickle.dump(self, f)
+            with open("simple_vocab.pkl", 'wb') as f:
+                pickle.dump({"idx2word":self.idx2word, "word2idx":self.word2idx},f)
         
     def build_vocab(self):
         """Populate the dictionaries for converting tokens to integers (and vice-versa)."""
@@ -93,3 +95,4 @@ class Vocabulary(object):
 
     def __len__(self):
         return len(self.word2idx)
+

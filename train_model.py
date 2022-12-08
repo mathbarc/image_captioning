@@ -10,17 +10,23 @@ from torchvision import transforms
 
 from data_loader import get_loader
 from model import EncoderCNN, DecoderRNN
+import mlflow
+
 
 ## TODO #1: Select appropriate values for the Python variables below.
-batch_size = 20          # batch size
+batch_size = 50          # batch size
 vocab_threshold = 5        # minimum word count threshold
 vocab_from_file = True    # if True, load existing vocab file
-embed_size = 256           # dimensionality of image and word embeddings
-hidden_size = 512          # number of features in hidden state of the RNN decoder
+embed_size = 300           # dimensionality of image and word embeddings
+hidden_size = 1000          # number of features in hidden state of the RNN decoder
 num_epochs = 10             # number of training epochs
 save_every = 1             # determines frequency of saving model weights
 print_every = 100          # determines window for printing average loss
-log_file = 'training_log.txt'       # name of file with saved training loss and perplexity
+num_layers = 1
+lr = 5e-2
+opt_name = "adam"
+scheduler_name = "cosine_annealing"
+training_params = {"opt":opt_name,"scheduler":scheduler_name, "num_layers":num_layers, "lr":lr, "batch_size":batch_size, "vocab_threshold":vocab_threshold, "embed_size":embed_size, "hidden_size":hidden_size, "num_epochs":num_epochs}
 
 # (Optional) TODO #2: Amend the image transform below.
 transform_train = transforms.Compose([ 
@@ -43,7 +49,7 @@ vocab_size = len(data_loader.dataset.vocab)
 
 # Initialize the encoder and decoder. 
 encoder = EncoderCNN(embed_size)
-decoder = DecoderRNN(embed_size, hidden_size, vocab_size)
+decoder = DecoderRNN(embed_size, hidden_size, vocab_size, num_layers)
 
 # Move models to GPU if CUDA is available. 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -57,13 +63,33 @@ criterion = nn.CrossEntropyLoss().cuda() if torch.cuda.is_available() else nn.Cr
 params = list(encoder.parameters())+list(decoder.parameters())
 
 # TODO #4: Define the optimizer.
-optimizer = torch.optim.Adam(params,1e-3)
+if opt_name == "adam":
+    optimizer = torch.optim.Adam(params,lr)
+elif opt_name == "sgd":
+    optimizer = torch.optim.SGD(params,lr)
+elif opt_name == "rprop":
+    optimizer = torch.optim.Rprop(params,lr)
 
 # Set the total number of training steps per epoch.
 total_step = math.ceil(len(data_loader.dataset.caption_lengths) / data_loader.batch_sampler.batch_size)
 
-# Open the training log file.
-f = open(log_file, 'w')
+if scheduler_name == "step":
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, total_step/10)
+if scheduler_name == "cosine_annealing":
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,(total_step)*num_epochs)
+
+
+
+mlflow.set_tracking_uri("http://mlflow.cluster.local")
+experiment = mlflow.get_experiment_by_name("Image Captioning")
+if experiment is None:
+    experiment_id = mlflow.create_experiment("Image Captioning")
+else:
+    experiment_id = experiment.experiment_id
+mlflow.start_run(experiment_id=experiment_id)
+mlflow.log_params(training_params)
+mlflow.log_artifact("./vocab.pkl")
+
 
 for epoch in range(1, num_epochs+1):
     
@@ -98,26 +124,21 @@ for epoch in range(1, num_epochs+1):
         
         # Update the parameters in the optimizer.
         optimizer.step()
+        scheduler.step()
             
         # Get training statistics.
-        stats = 'Epoch [%d/%d], Step [%d/%d], Loss: %.4f, Perplexity: %5.4f' % (epoch, num_epochs, i_step, total_step, loss.item(), np.exp(loss.item()))
-        
-        # Print training statistics (on same line).
-        print('\r' + stats, end="")
-        sys.stdout.flush()
-        
-        # Print training statistics to file.
-        f.write(stats + '\n')
-        f.flush()
-        
-        # Print training statistics (on different line).
-        if i_step % print_every == 0:
-            print('\r' + stats)
+        stats = {"loss": loss.item(), "perplexity": np.exp(loss.item()), "lr":scheduler.get_last_lr()[0]}
+
+        mlflow.log_metrics(stats, (total_step*(epoch-1))+i_step-1)
             
     # Save the weights.
     if epoch % save_every == 0:
+
+        mlflow.pytorch.log_state_dict(encoder.state_dict(),f"{epoch}/encoder")
+        mlflow.pytorch.log_state_dict(decoder.state_dict(),f"{epoch}/decoder")
+
         torch.save(decoder.state_dict(), os.path.join('./models', 'decoder-%d.pkl' % epoch))
         torch.save(encoder.state_dict(), os.path.join('./models', 'encoder-%d.pkl' % epoch))
+    
+    
 
-# Close the training log file.
-f.close()

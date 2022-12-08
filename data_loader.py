@@ -155,7 +155,7 @@ class CoCoDataset(data.Dataset):
             #     image = cv2.imread(os.path.join(self.img_folder, path))
             
             transformed_image = self.transform(image)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             # return original image and pre-processed image tensor
             return image, transformed_image
