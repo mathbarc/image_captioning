@@ -9,33 +9,35 @@ import torch.utils.data as data
 from torchvision import transforms
 
 from data_loader import get_loader
-from model import EncoderCNN, DecoderRNN
+from model import EncoderCNN, DecoderRNN, get_transform
 import mlflow
 
 
 ## TODO #1: Select appropriate values for the Python variables below.
-batch_size = 50          # batch size
+batch_size = 64          # batch size
 vocab_threshold = 5        # minimum word count threshold
 vocab_from_file = True    # if True, load existing vocab file
-embed_size = 300           # dimensionality of image and word embeddings
-hidden_size = 1000          # number of features in hidden state of the RNN decoder
+embed_size = 256           # dimensionality of image and word embeddings
+hidden_size = 512          # number of features in hidden state of the RNN decoder
 num_epochs = 10             # number of training epochs
 save_every = 1             # determines frequency of saving model weights
 print_every = 100          # determines window for printing average loss
-num_layers = 1
-lr = 5e-2
+num_layers = 2
+lr = 5e-4
 opt_name = "adam"
 scheduler_name = "cosine_annealing"
 training_params = {"opt":opt_name,"scheduler":scheduler_name, "num_layers":num_layers, "lr":lr, "batch_size":batch_size, "vocab_threshold":vocab_threshold, "embed_size":embed_size, "hidden_size":hidden_size, "num_epochs":num_epochs}
 
 # (Optional) TODO #2: Amend the image transform below.
-transform_train = transforms.Compose([ 
-    transforms.ToTensor(),                           # convert the PIL Image to a tensor
-    transforms.Resize(256),                          # smaller edge of image resized to 256
-    transforms.RandomCrop(224),                      # get 224x224 crop from random location
-    transforms.RandomHorizontalFlip(),               # horizontally flip image with probability=0.5
-    transforms.Normalize((0.485, 0.456, 0.406),      # normalize image for pre-trained model
-                         (0.229, 0.224, 0.225))])
+# transform_train = transforms.Compose([ 
+#     transforms.ToTensor(),                           # convert the PIL Image to a tensor
+#     transforms.Resize(256),                          # smaller edge of image resized to 256
+#     transforms.RandomCrop(224),                      # get 224x224 crop from random location
+#     transforms.RandomHorizontalFlip(),               # horizontally flip image with probability=0.5
+#     transforms.Normalize((0.485, 0.456, 0.406),      # normalize image for pre-trained model
+#                          (0.229, 0.224, 0.225))])
+
+transform_train = get_transform()
 
 # Build data loader.
 data_loader = get_loader(transform=transform_train,

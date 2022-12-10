@@ -13,7 +13,7 @@ class ImageCaptioningBot:
     def __init__(self):
         token = os.environ["BOT_TOKEN"]
         self.bot = telebot.TeleBot(token, threaded=True)
-        self.transform = model.get_transform()
+        self.transform = model.get_inference_transform()
 
         embed_size = 256
         hidden_size = 512
@@ -28,8 +28,8 @@ class ImageCaptioningBot:
         self.decoder.eval()
 
         # Load the trained weights.
-        self.encoder.load_state_dict(torch.load(os.path.join('./models/encoder.pth'),map_location=self.device))
-        self.decoder.load_state_dict(torch.load(os.path.join('./models/decoder.pth'),map_location=self.device))
+        self.encoder.load_state_dict(torch.load(os.path.join('./models/encoder.pkl'),map_location=self.device))
+        self.decoder.load_state_dict(torch.load(os.path.join('./models/decoder.pkl'),map_location=self.device))
 
         self.encoder.to(self.device)
         self.decoder.to(self.device)
@@ -42,14 +42,30 @@ class ImageCaptioningBot:
             image_data = self.bot.download_file(image_path.file_path)
             data = numpy.fromstring(image_data,dtype=numpy.uint8)
             image = cv2.imdecode(data, cv2.IMREAD_COLOR)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             caption = self.inference(image)
             self.bot.send_message(chat_id=message.chat.id, text=caption)
+        
+        # @self.bot.message_handler(commands=["start"])
+        # def start(message:telebot.telebot.types.Message):
+        #     self.bot.send_message(chat_id=message.chat.id, text="Send me an image and I will describe it to you!")
+
         
         self.bot.infinity_polling()
 
     def inference(self, image):
         
+        size = image.shape
+
+        if size[0] < size[1]:
+            diff = int((size[1]-size[0])/2)
+            image = image[0:size[0], diff:diff+size[0]]
+        else:
+            diff = int((size[0]-size[1])/2)
+            image = image[diff:diff+size[1], 0:size[1]]
+            
+
         transformed_image = self.transform(image)
         transformed_image = transformed_image.to(self.device)
         size = transformed_image.size()

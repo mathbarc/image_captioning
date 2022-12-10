@@ -8,16 +8,18 @@ from torchvision import transforms
 class EncoderCNN(nn.Module):
     def __init__(self, embed_size):
         super(EncoderCNN, self).__init__()
-        resnet = models.resnet50(pretrained=True)
-        for param in resnet.parameters():
+        efficient_net = models.efficientnet_v2_l(pretrained=True)
+        for param in efficient_net.parameters():
             param.requires_grad_(False)
         
-        modules = list(resnet.children())[:-1]
-        self.resnet = nn.Sequential(*modules)
-        self.embed = nn.Linear(resnet.fc.in_features, embed_size)
+        modules = list(efficient_net.children())[:-1]
+        self.cnn = nn.Sequential(*modules)
+
+        self.embed = nn.Linear(efficient_net.classifier[1].in_features, embed_size)
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, images):
-        features = self.resnet(images)
+        features = self.cnn(images)
         features = features.view(features.size(0), -1)
         features = self.embed(features)
         return features
@@ -90,8 +92,19 @@ class DecoderRNN(nn.Module):
 def get_transform():
     return transforms.Compose([ 
         transforms.ToTensor(),                           # convert the PIL Image to a tensor
-        transforms.Resize(256),                          # smaller edge of image resized to 256
-        transforms.RandomCrop(224),                      # get 224x224 crop from random location
+        transforms.Resize(512),                          # smaller edge of image resized to 256
+        transforms.RandomCrop(480),                      # get 224x224 crop from random location
         transforms.RandomHorizontalFlip(),               # horizontally flip image with probability=0.5
-        transforms.Normalize((0.485, 0.456, 0.406),      # normalize image for pre-trained model
-                            (0.229, 0.224, 0.225))])
+        transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5)),
+        
+        ])
+
+def get_inference_transform():
+    return transforms.Compose([ 
+        transforms.ToTensor(),                           # convert the PIL Image to a tensor
+        transforms.Resize(480),                          # smaller edge of image resized to 256
+        transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5)),
+        ])
+
+if __name__=="__main__":
+    encoder = EncoderCNN(256)

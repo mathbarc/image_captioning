@@ -124,6 +124,8 @@ class CoCoDataset(data.Dataset):
             else:
                 path = self.coco.loadImgs(img_id)[0]['file_name']
                 image = cv2.imread(os.path.join(self.img_folder, path))
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
             # Convert image to tensor and pre-process using transform
             image = self.transform(image)
 
@@ -142,6 +144,7 @@ class CoCoDataset(data.Dataset):
         else:
             path = self.paths[index]
             image = cv2.imread(os.path.join(self.img_folder, path))
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             # ann_id = self.ids[index]
             # img_id = self.coco.anns[ann_id]['image_id']
