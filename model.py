@@ -8,7 +8,7 @@ from torchvision import transforms
 class EncoderCNN(nn.Module):
     def __init__(self, embed_size):
         super(EncoderCNN, self).__init__()
-        efficient_net = models.efficientnet_v2_l(pretrained=True)
+        efficient_net = models.efficientnet_v2_s(pretrained=True)
         for param in efficient_net.parameters():
             param.requires_grad_(False)
         
@@ -91,19 +91,19 @@ class DecoderRNN(nn.Module):
 
 def get_transform():
     return transforms.Compose([ 
-        transforms.ToTensor(),                           # convert the PIL Image to a tensor
-        transforms.Resize(512),                          # smaller edge of image resized to 256
-        transforms.RandomCrop(480),                      # get 224x224 crop from random location
-        transforms.RandomHorizontalFlip(),               # horizontally flip image with probability=0.5
-        transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5)),
-        
+        transforms.ToTensor(),
+        transforms.RandomPerspective(distortion_scale=0.3,p=0.2),
+        transforms.ColorJitter(),
+        transforms.Resize(416),
+        transforms.RandomCrop(384),
+        transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
 
 def get_inference_transform():
     return transforms.Compose([ 
-        transforms.ToTensor(),                           # convert the PIL Image to a tensor
-        transforms.Resize(480),                          # smaller edge of image resized to 256
-        transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5)),
+        transforms.ToTensor(),
+        transforms.Resize(384),
+        transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
 
 if __name__=="__main__":

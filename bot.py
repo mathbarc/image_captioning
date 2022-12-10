@@ -15,8 +15,9 @@ class ImageCaptioningBot:
         self.bot = telebot.TeleBot(token, threaded=True)
         self.transform = model.get_inference_transform()
 
-        embed_size = 256
+        embed_size = 800
         hidden_size = 512
+        n_layers = 2
 
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -24,7 +25,7 @@ class ImageCaptioningBot:
 
         self.encoder = model.EncoderCNN(embed_size)
         self.encoder.eval()
-        self.decoder = model.DecoderRNN(embed_size, hidden_size, len(self.vocab["word2idx"]))
+        self.decoder = model.DecoderRNN(embed_size, hidden_size, len(self.vocab["word2idx"]), n_layers)
         self.decoder.eval()
 
         # Load the trained weights.
@@ -67,9 +68,9 @@ class ImageCaptioningBot:
             
 
         transformed_image = self.transform(image)
-        transformed_image = transformed_image.to(self.device)
         size = transformed_image.size()
         reshaped_image = torch.reshape(transformed_image, [1,size[0],size[1],size[2]])
+        reshaped_image = reshaped_image.to(self.device)
 
         # Obtain the embedded image features.
         features = self.encoder(reshaped_image).unsqueeze(1)

@@ -17,7 +17,7 @@ import mlflow
 batch_size = 64          # batch size
 vocab_threshold = 5        # minimum word count threshold
 vocab_from_file = True    # if True, load existing vocab file
-embed_size = 256           # dimensionality of image and word embeddings
+embed_size = 800           # dimensionality of image and word embeddings
 hidden_size = 512          # number of features in hidden state of the RNN decoder
 num_epochs = 10             # number of training epochs
 save_every = 1             # determines frequency of saving model weights
