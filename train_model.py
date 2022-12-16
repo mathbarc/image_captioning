@@ -14,28 +14,20 @@ import mlflow
 
 
 ## TODO #1: Select appropriate values for the Python variables below.
+batch_group_size = 4   # batch group size
 batch_size = 64          # batch size
 vocab_threshold = 5        # minimum word count threshold
 vocab_from_file = True    # if True, load existing vocab file
-embed_size = 800           # dimensionality of image and word embeddings
-hidden_size = 512          # number of features in hidden state of the RNN decoder
+embed_size = 1024           # dimensionality of image and word embeddings
+hidden_size = 1024          # number of features in hidden state of the RNN decoder
 num_epochs = 10             # number of training epochs
 save_every = 1             # determines frequency of saving model weights
-print_every = 100          # determines window for printing average loss
 num_layers = 2
-lr = 5e-4
+lr = 1e-3
+print_every = 10
 opt_name = "adam"
 scheduler_name = "cosine_annealing"
-training_params = {"opt":opt_name,"scheduler":scheduler_name, "num_layers":num_layers, "lr":lr, "batch_size":batch_size, "vocab_threshold":vocab_threshold, "embed_size":embed_size, "hidden_size":hidden_size, "num_epochs":num_epochs}
-
-# (Optional) TODO #2: Amend the image transform below.
-# transform_train = transforms.Compose([ 
-#     transforms.ToTensor(),                           # convert the PIL Image to a tensor
-#     transforms.Resize(256),                          # smaller edge of image resized to 256
-#     transforms.RandomCrop(224),                      # get 224x224 crop from random location
-#     transforms.RandomHorizontalFlip(),               # horizontally flip image with probability=0.5
-#     transforms.Normalize((0.485, 0.456, 0.406),      # normalize image for pre-trained model
-#                          (0.229, 0.224, 0.225))])
+training_params = {"opt":opt_name,"scheduler":scheduler_name, "num_layers":num_layers, "lr":lr, "batch_size":batch_size, "vocab_threshold":vocab_threshold, "embed_size":embed_size, "hidden_size":hidden_size, "num_epochs":num_epochs, "batch_group_size":batch_group_size}
 
 transform_train = get_transform()
 
@@ -57,6 +49,10 @@ decoder = DecoderRNN(embed_size, hidden_size, vocab_size, num_layers)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 encoder.to(device)
 decoder.to(device)
+
+# Load the trained weights.
+encoder.load_state_dict(torch.load(os.path.join('./models/encoder-4.pkl'),map_location=device))
+decoder.load_state_dict(torch.load(os.path.join('./models/decoder-4.pkl'),map_location=device))
 
 # Define the loss function. 
 criterion = nn.CrossEntropyLoss().cuda() if torch.cuda.is_available() else nn.CrossEntropyLoss()
@@ -92,7 +88,7 @@ mlflow.start_run(experiment_id=experiment_id)
 mlflow.log_params(training_params)
 mlflow.log_artifact("./vocab.pkl")
 
-
+acc_loss = 0
 for epoch in range(1, num_epochs+1):
     
     for i_step in range(1, total_step+1):
@@ -109,10 +105,11 @@ for epoch in range(1, num_epochs+1):
         # Move batch of images and captions to GPU if CUDA is available.
         images = images.to(device)
         captions = captions.to(device)
-        
-        # Zero the gradients.
-        decoder.zero_grad()
-        encoder.zero_grad()
+
+        if (i_step-1)%batch_group_size == 0:
+            # Zero the gradients.
+            decoder.zero_grad()
+            encoder.zero_grad()
         
         # Pass the inputs through the CNN-RNN model.
         features = encoder(images)
@@ -120,18 +117,27 @@ for epoch in range(1, num_epochs+1):
         
         # Calculate the batch loss.
         loss = criterion(outputs.view(-1, vocab_size), captions.view(-1))
-        
+        acc_loss += loss.item()
+
         # Backward pass.
         loss.backward()
         
-        # Update the parameters in the optimizer.
-        optimizer.step()
-        scheduler.step()
             
         # Get training statistics.
-        stats = {"loss": loss.item(), "perplexity": np.exp(loss.item()), "lr":scheduler.get_last_lr()[0]}
+        if (i_step-1)%batch_group_size == batch_group_size-1:
+            
+            # Update the parameters in the optimizer.
+            optimizer.step()
+            scheduler.step()
 
-        mlflow.log_metrics(stats, (total_step*(epoch-1))+i_step-1)
+            if int(((i_step)/batch_group_size)%print_every)==0:
+                acc_loss = acc_loss/batch_group_size
+                stats = {"loss": acc_loss, "perplexity": np.exp(acc_loss), "lr":scheduler.get_last_lr()[0]}
+                mlflow.log_metrics(stats, (total_step*(epoch-1))+i_step-1)
+            acc_loss = 0
+
+            
+            
             
     # Save the weights.
     if epoch % save_every == 0:

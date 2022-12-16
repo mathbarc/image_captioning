@@ -124,7 +124,16 @@ class CoCoDataset(data.Dataset):
             else:
                 path = self.coco.loadImgs(img_id)[0]['file_name']
                 image = cv2.imread(os.path.join(self.img_folder, path))
-                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            size = image.shape
+
+            if size[0] < size[1]:
+                diff = int((size[1]-size[0])/2)
+                image = image[0:size[0], diff:diff+size[0]]
+            else:
+                diff = int((size[0]-size[1])/2)
+                image = image[diff:diff+size[1], 0:size[1]]
             
             # Convert image to tensor and pre-process using transform
             image = self.transform(image)
@@ -144,21 +153,18 @@ class CoCoDataset(data.Dataset):
         else:
             path = self.paths[index]
             image = cv2.imread(os.path.join(self.img_folder, path))
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            # ann_id = self.ids[index]
-            # img_id = self.coco.anns[ann_id]['image_id']
+            size = image.shape
 
-            # # Convert image to tensor and pre-process using transform
-            # if self.download_directly:
-            #     url = self.coco.loadImgs(img_id)[0]['coco_url']
-            #     image = io.imread(url)
-            # else:
-            #     path = self.coco.loadImgs(img_id)[0]['file_name']
-            #     image = cv2.imread(os.path.join(self.img_folder, path))
+            if size[0] < size[1]:
+                diff = int((size[1]-size[0])/2)
+                image = image[0:size[0], diff:diff+size[0]]
+            else:
+                diff = int((size[0]-size[1])/2)
+                image = image[diff:diff+size[1], 0:size[1]]
             
             transformed_image = self.transform(image)
-            # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             # return original image and pre-processed image tensor
             return image, transformed_image

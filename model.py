@@ -1,4 +1,3 @@
-from os import stat
 import torch
 import torch.nn as nn
 import torchvision.models as models
@@ -8,7 +7,7 @@ from torchvision import transforms
 class EncoderCNN(nn.Module):
     def __init__(self, embed_size):
         super(EncoderCNN, self).__init__()
-        efficient_net = models.efficientnet_v2_s(pretrained=True)
+        efficient_net = models.efficientnet_v2_l(pretrained=True)
         for param in efficient_net.parameters():
             param.requires_grad_(False)
         
@@ -17,11 +16,15 @@ class EncoderCNN(nn.Module):
 
         self.embed = nn.Linear(efficient_net.classifier[1].in_features, embed_size)
         self.dropout = nn.Dropout(0.2)
+        self.activation = nn.Tanh()
 
     def forward(self, images):
         features = self.cnn(images)
         features = features.view(features.size(0), -1)
+        features = self.dropout(features)
         features = self.embed(features)
+        features = self.activation(features)
+        
         return features
     
 
@@ -92,18 +95,17 @@ class DecoderRNN(nn.Module):
 def get_transform():
     return transforms.Compose([ 
         transforms.ToTensor(),
-        transforms.RandomPerspective(distortion_scale=0.3,p=0.2),
-        transforms.ColorJitter(),
-        transforms.Resize(416),
-        transforms.RandomCrop(384),
-        transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
+        transforms.Resize(512),
+        transforms.RandomCrop(480),
+        transforms.RandomHorizontalFlip(), 
+        transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5)),
         ])
 
 def get_inference_transform():
     return transforms.Compose([ 
         transforms.ToTensor(),
-        transforms.Resize(384),
-        transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
+        transforms.Resize(480),
+        transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5)),
         ])
 
 if __name__=="__main__":

@@ -15,8 +15,8 @@ class ImageCaptioningBot:
         self.bot = telebot.TeleBot(token, threaded=True)
         self.transform = model.get_inference_transform()
 
-        embed_size = 800
-        hidden_size = 512
+        embed_size = 1024
+        hidden_size = 1024
         n_layers = 2
 
 

@@ -4,8 +4,8 @@ RUN apt update;DEBIAN_FRONTEND=noninteractive apt install libavcodec-dev libavfo
 RUN pip install torch==1.12.0 torchvision==0.13.0 pyTelegramBotAPI numpy opencv-python==4.6.0.66
 
 COPY simple_vocab.pkl ./
-COPY models/encoder-6.pkl ./models/encoder.pkl
-COPY models/decoder-6.pkl ./models/decoder.pkl
+COPY models/encoder-3.pkl ./models/encoder.pkl
+COPY models/decoder-3.pkl ./models/decoder.pkl
 
 COPY model.py model.py
 COPY util.py util.py
