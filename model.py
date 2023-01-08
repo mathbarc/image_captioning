@@ -4,28 +4,18 @@ import torchvision.models as models
 from torchvision import transforms
 
 
-class EncoderCNN(nn.Module):
-    def __init__(self, embed_size):
-        super(EncoderCNN, self).__init__()
-        efficient_net = models.efficientnet_v2_l(pretrained=True)
-        for param in efficient_net.parameters():
-            param.requires_grad_(False)
-        
-        modules = list(efficient_net.children())[:-1]
-        self.cnn = nn.Sequential(*modules)
+def create_encoder(embed_size, pretrained=True):
+    efficient_net = models.efficientnet_v2_s(pretrained=pretrained)
+    for param in efficient_net.parameters():
+        param.requires_grad_(not pretrained)
+    
+    modules = list(efficient_net.children())[:-1]
+    cnn = nn.Sequential(*modules)
 
-        self.embed = nn.Linear(efficient_net.classifier[1].in_features, embed_size)
-        self.dropout = nn.Dropout(0.2)
-        self.activation = nn.Tanh()
-
-    def forward(self, images):
-        features = self.cnn(images)
-        features = features.view(features.size(0), -1)
-        features = self.dropout(features)
-        features = self.embed(features)
-        features = self.activation(features)
-        
-        return features
+    cnn.add_module("flatten",nn.Flatten())
+    cnn.add_module("linear",nn.Linear(efficient_net.classifier[1].in_features, embed_size))
+    cnn.add_module("activation",nn.Tanh())
+    return cnn
     
 
 class DecoderRNN(nn.Module):
@@ -95,18 +85,16 @@ class DecoderRNN(nn.Module):
 def get_transform():
     return transforms.Compose([ 
         transforms.ToTensor(),
-        transforms.Resize(512),
-        transforms.RandomCrop(480),
+        transforms.Resize(480),
+        transforms.RandomCrop(384),
         transforms.RandomHorizontalFlip(), 
-        transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5)),
+        transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
 
 def get_inference_transform():
     return transforms.Compose([ 
         transforms.ToTensor(),
-        transforms.Resize(480),
-        transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5)),
+        transforms.Resize(384),
+        transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
 
-if __name__=="__main__":
-    encoder = EncoderCNN(256)

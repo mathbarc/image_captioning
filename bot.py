@@ -7,11 +7,18 @@ import os
 import cv2
 import string
 import numpy
+import boto3
+import botocore.exceptions
+import logging
+import io
 
 class ImageCaptioningBot:
 
     def __init__(self):
         token = os.environ["BOT_TOKEN"]
+        
+        self.s3Client = boto3.client(service_name="s3", endpoint_url=os.environ["BUCKET_ENDPOINT"], aws_access_key_id=os.environ["BUCKET_USER"], aws_secret_access_key=os.environ["BUCKET_SECRET"])
+        self.bucket = os.environ["BUCKET_NAME"]
         self.bot = telebot.TeleBot(token, threaded=True)
         self.transform = model.get_inference_transform()
 
@@ -29,11 +36,17 @@ class ImageCaptioningBot:
         self.decoder.eval()
 
         # Load the trained weights.
-        self.encoder.load_state_dict(torch.load(os.path.join('./models/encoder.pkl'),map_location=self.device))
-        self.decoder.load_state_dict(torch.load(os.path.join('./models/decoder.pkl'),map_location=self.device))
+        self.encoder.load_state_dict(torch.load(os.path.join('./models/encoder.pth'),map_location=self.device))
+        self.decoder.load_state_dict(torch.load(os.path.join('./models/decoder.pth'),map_location=self.device))
 
         self.encoder.to(self.device)
         self.decoder.to(self.device)
+
+        try:
+            str_buff = b"test Ok"
+            self.s3Client.put_object(Body=str_buff, Bucket=self.bucket, Key="test.txt")
+        except botocore.exceptions.ClientError as e:
+                logging.error(e)
 
 
     def run(self):
@@ -47,6 +60,17 @@ class ImageCaptioningBot:
 
             caption = self.inference(image)
             self.bot.send_message(chat_id=message.chat.id, text=caption)
+            
+            img_name = str(message.chat.id)+"/"+str(message.photo[-1].file_id)+"__"+caption+".jpg"
+
+            try:
+                bytesIO = io.BytesIO(image_data)
+                img_name = img_name.replace(" ","_")
+                response = self.s3Client.put_object(Body=bytesIO, Bucket=self.bucket, Key=img_name)
+            except botocore.exceptions.ClientError as e:
+                logging.error(e)
+
+            
         
         # @self.bot.message_handler(commands=["start"])
         # def start(message:telebot.telebot.types.Message):

@@ -40,7 +40,7 @@ def get_loader(transform,
       cocoapi_loc: The location of the folder containing the COCO API: https://github.com/cocodataset/cocoapi
     """
     
-    assert mode in ['train', 'test'], "mode must be one of 'train' or 'test'."
+    assert mode in ['train', 'test', 'valid'], "mode must be one of 'train' or 'test'."
     if vocab_from_file==False: assert mode=='train', "To generate vocab from captions file, must be in training mode (mode='train')."
 
     # Based on mode (train, val, test), obtain img_folder and annotations_file.
@@ -54,6 +54,12 @@ def get_loader(transform,
         assert vocab_from_file==True, "Change vocab_from_file to True."
         img_folder = os.path.join(cocoapi_loc, 'images/test2014/')
         annotations_file = os.path.join(cocoapi_loc, 'annotations/image_info_test2014.json')
+
+    if mode == 'valid':
+        assert os.path.exists(vocab_file), "Must first generate vocab.pkl from training data."
+        assert vocab_from_file==True, "Change vocab_from_file to True."
+        img_folder = os.path.join(cocoapi_loc, 'images/val2014/')
+        annotations_file = os.path.join(cocoapi_loc, 'annotations/captions_val2014.json')
 
     # COCO caption dataset.
     dataset = CoCoDataset(transform=transform,
@@ -99,7 +105,7 @@ class CoCoDataset(data.Dataset):
             end_word, unk_word, annotations_file, vocab_from_file)
         self.img_folder = img_folder
         self.download_directly = download_directly
-        if self.mode == 'train':
+        if self.mode == 'train' or self.mode == "valid":
             self.coco = COCO(annotations_file)
             self.ids = list(self.coco.anns.keys())
             print('Obtaining caption lengths...')
@@ -113,7 +119,7 @@ class CoCoDataset(data.Dataset):
         
     def __getitem__(self, index):
         # obtain image and caption if in training mode
-        if self.mode == 'train':
+        if self.mode == 'train' or self.mode == "valid":
             ann_id = self.ids[index]
             caption = self.coco.anns[ann_id]['caption']
             img_id = self.coco.anns[ann_id]['image_id']
@@ -148,6 +154,8 @@ class CoCoDataset(data.Dataset):
 
             # return pre-processed image and caption tensors
             return image, caption
+        
+
 
         # obtain image if in test mode
         else:
@@ -185,7 +193,7 @@ class CoCoDataset(data.Dataset):
         return caption_tokens
 
     def __len__(self):
-        if self.mode == 'train':
+        if self.mode == 'train' or self.mode == "valid":
             return len(self.ids)
         else:
             return len(self.paths)
