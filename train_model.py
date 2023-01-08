@@ -10,7 +10,7 @@ from torchvision import transforms
 import tqdm
 
 from data_loader import get_loader
-from model import create_encoder, DecoderRNN, get_transform, get_inference_transform
+from model import ImageCaptioner, get_transform, get_inference_transform
 import mlflow
 
 
@@ -20,10 +20,10 @@ batch_size = 64          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = False    # if True, load existing vocab file
 embed_size = 64           # dimensionality of image and word embeddings
-hidden_size = 128          # number of features in hidden state of the RNN decoder
-num_epochs = 4             # number of training epochs
+hidden_size = 32          # number of features in hidden state of the RNN decoder
+num_epochs = 15             # number of training epochs
 save_every = 1             # determines frequency of saving model weights
-num_layers = 2
+num_layers = 3
 lr = 1e-3
 print_every = 10
 opt_name = "adam"
@@ -52,13 +52,11 @@ vocab_size = len(data_loader.dataset.vocab)
 training_params = {"opt":opt_name,"scheduler":scheduler_name, "num_layers":num_layers, "lr":lr, "batch_size":batch_size, "vocab_threshold":vocab_threshold, "embed_size":embed_size, "hidden_size":hidden_size, "num_epochs":num_epochs, "batch_group_size":batch_group_size, "vocab_size":vocab_size}
 
 # Initialize the encoder and decoder. 
-encoder = create_encoder(embed_size)
-decoder = DecoderRNN(embed_size, hidden_size, vocab_size, num_layers)
+model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers)
 
 # Move models to GPU if CUDA is available. 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-encoder.to(device)
-decoder.to(device)
+model.to(device)
 
 # Load the trained weights.
 # encoder.load_state_dict(torch.load(os.path.join('./models/encoder-4.pkl'),map_location=device))
@@ -68,7 +66,7 @@ decoder.to(device)
 criterion = nn.CrossEntropyLoss().cuda() if torch.cuda.is_available() else nn.CrossEntropyLoss()
 
 # TODO #3: Specify the learnable parameters of the model.
-params = list(encoder.parameters())+list(decoder.parameters())
+params = list(model.encoder.parameters())+list(model.decoder.parameters())
 
 # TODO #4: Define the optimizer.
 if opt_name == "adam":
@@ -79,12 +77,13 @@ elif opt_name == "rprop":
     optimizer = torch.optim.Rprop(params,lr)
 
 # Set the total number of training steps per epoch.
-total_step = math.ceil(len(data_loader.dataset.caption_lengths) / data_loader.batch_sampler.batch_size)
+# total_step = math.ceil(len(data_loader.dataset.caption_lengths) / data_loader.batch_sampler.batch_size)
+total_step = 2000
 
 if scheduler_name == "step":
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, total_step/10)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, total_step/batch_group_size)
 if scheduler_name == "cosine_annealing":
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,(total_step)*num_epochs)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,((total_step/batch_group_size)*num_epochs)*2)
 
 
 
@@ -118,12 +117,10 @@ for epoch in range(1, num_epochs+1):
 
         if (i_step-1)%batch_group_size == 0:
             # Zero the gradients.
-            decoder.zero_grad()
-            encoder.zero_grad()
+            model.zero_grad()
         
         # Pass the inputs through the CNN-RNN model.
-        features = encoder(images)
-        outputs = decoder(features, captions)
+        outputs = model(images, captions)
         
         # Calculate the batch loss.
         loss = criterion(outputs.view(-1, vocab_size), captions.view(-1))
@@ -153,15 +150,10 @@ for epoch in range(1, num_epochs+1):
     # Save the weights.
     if epoch % save_every == 0:
 
-        mlflow.pytorch.log_model(encoder,f"{epoch}/encoder")
-        mlflow.pytorch.log_model(decoder,f"{epoch}/decoder",extra_files="model.py")
+        mlflow.pytorch.log_model(model,f"{epoch}/image_captioner",extra_files=["model.py"])
+        torch.save(model, os.path.join('./models', 'image_captioner-%d.pkl' % epoch))
 
-        torch.save(decoder, os.path.join('./models', 'decoder-%d.pkl' % epoch))
-        torch.save(encoder, os.path.join('./models', 'encoder-%d.pkl' % epoch))
-
-        encoder.eval()
-        decoder.eval()
-
+        model.eval()
 
         acc_test_loss = 0
         count = 0
@@ -175,14 +167,12 @@ for epoch in range(1, num_epochs+1):
 
             images, captions = next(iter(data_loader_valid))
 
-            decoder.zero_grad()
-            encoder.zero_grad()
+            model.zero_grad()
 
             images = images.to(device)
             captions = captions.to(device)
 
-            features = encoder(images)
-            outputs = decoder(features, captions)
+            outputs = model(images, captions)
             
             # Calculate the batch loss.
             loss = criterion(outputs.view(-1, vocab_size), captions.view(-1))
@@ -193,8 +183,7 @@ for epoch in range(1, num_epochs+1):
         stats = {"loss_valid": acc_test_loss, "perplexity_valid": np.exp(acc_test_loss)}
         mlflow.log_metrics(stats, (total_step*(epoch)))
 
-        encoder.train()
-        decoder.train()
+        model.train()
             
             
 

@@ -82,6 +82,24 @@ class DecoderRNN(nn.Module):
         
         return h,c
 
+class ImageCaptioner(nn.Module):
+    def __init__(self, embed_size:int, hidden_size:int, vocab_size:int, num_layers:int=1, pretreined:bool=True) -> None:
+        super().__init__()
+        self.encoder = create_encoder(embed_size, pretreined)
+        self.decoder = DecoderRNN(embed_size, hidden_size, vocab_size, num_layers)
+    
+    def forward(self, images, captions):
+        features = self.encoder(images)
+        outputs = self.decoder(features, captions)
+        return outputs
+    
+    def sample(self, image, max_len=20):
+        features = self.encoder(image).unsqueeze(1)
+        captions = self.decoder.sample(features, max_len)
+        return captions
+
+
+
 def get_transform():
     return transforms.Compose([ 
         transforms.ToTensor(),
