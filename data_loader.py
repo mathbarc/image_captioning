@@ -3,7 +3,7 @@ import os
 import torch
 import torch.utils.data as data
 from vocabulary import Vocabulary
-import skimage.io as io
+from torchvision import io
 import cv2
 from pycocotools.coco import COCO
 import numpy as np
@@ -39,6 +39,8 @@ def get_loader(transform,
       num_workers: Number of subprocesses to use for data loading 
       cocoapi_loc: The location of the folder containing the COCO API: https://github.com/cocodataset/cocoapi
     """
+    if not os.path.exists("tokenizers"):
+        nltk.download('punkt',"./")
     
     assert mode in ['train', 'test', 'valid'], "mode must be one of 'train' or 'test'."
     if vocab_from_file==False: assert mode=='train', "To generate vocab from captions file, must be in training mode (mode='train')."
@@ -104,6 +106,8 @@ class CoCoDataset(data.Dataset):
         self.vocab = Vocabulary(vocab_threshold, vocab_file, start_word,
             end_word, unk_word, annotations_file, vocab_from_file)
         self.img_folder = img_folder
+        if not os.path.exists(self.img_folder):
+            os.makedirs(self.img_folder)
         self.download_directly = download_directly
         if self.mode == 'train' or self.mode == "valid":
             self.coco = COCO(annotations_file)
@@ -124,13 +128,13 @@ class CoCoDataset(data.Dataset):
             caption = self.coco.anns[ann_id]['caption']
             img_id = self.coco.anns[ann_id]['image_id']
 
-            if self.download_directly:
-                url = self.coco.loadImgs(img_id)[0]['coco_url']
-                image = io.imread(url)
-            else:
-                path = self.coco.loadImgs(img_id)[0]['file_name']
-                image = cv2.imread(os.path.join(self.img_folder, path))
-                # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+            img_name = self.coco.loadImgs(img_id)[0]['file_name']
+            path = os.path.join(self.img_folder, img_name)
+            if not os.path.exists(path):
+                self.coco.download(self.img_folder, [img_id])
+
+            image = cv2.imread(path)
             
             size = image.shape
 
@@ -204,7 +208,7 @@ if __name__=="__main__":
 
     transform_train = transforms.Compose([ 
     transforms.ToTensor(),
-    transforms.Resize(256),                          # smaller edge of image resized to 256
+    transforms.Resize(256, antialias=True),                          # smaller edge of image resized to 256
     transforms.RandomCrop(224),                      # get 224x224 crop from random location
     transforms.RandomHorizontalFlip(),               # horizontally flip image with probability=0.5
     transforms.Normalize((0.485, 0.456, 0.406),      # normalize image for pre-trained model

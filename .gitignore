@@ -3,3 +3,5 @@ models
 nltk_data/
 training_log.txt
 **.pkl
+tokenizers
+**.pth
