@@ -19,8 +19,8 @@ batch_group_size = 1   # batch group size
 batch_size = 64          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = True    # if True, load existing vocab file
-embed_size = 2048           # dimensionality of image and word embeddings
-hidden_size = 2048          # number of features in hidden state of the RNN decoder
+embed_size = 1024           # dimensionality of image and word embeddings
+hidden_size = 1024          # number of features in hidden state of the RNN decoder
 num_epochs = 10             # number of training epochs
 save_every = 1000             # determines frequency of saving model weights
 num_layers = 3
@@ -28,7 +28,7 @@ lr = 1e-3
 last_every = 100
 opt_name = "adam"
 scheduler_name = "cosine_annealing"
-dropout = 0.2
+dropout = 0.3
 
 transform_train = get_transform()
 

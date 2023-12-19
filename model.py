@@ -13,10 +13,14 @@ def create_encoder(embed_size, pretrained=True, dropout = 0.2):
     modules = list(efficient_net.children())[:-1]
     cnn = nn.Sequential(*modules)
 
+    cnn.add_module("conv_output", Conv2dNormActivation(efficient_net.classifier[1].in_features, embed_size,activation_layer=nn.Mish))
+    cnn.add_module("pool", nn.AdaptiveAvgPool2d(1))
+    
     cnn.add_module("flatten",nn.Flatten())
+
     cnn.add_module("dropout",nn.Dropout(dropout))
-    cnn.add_module("features", nn.Linear(efficient_net.classifier[1].in_features, embed_size))
-    cnn.add_module("activation",nn.Tanh())
+    # cnn.add_module("features", nn.Linear(efficient_net.classifier[1].in_features, embed_size))
+    # cnn.add_module("activation",nn.Tanh())
     
     return cnn
     
