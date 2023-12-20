@@ -5,15 +5,16 @@ from torchvision import transforms
 from torchvision.ops import Conv2dNormActivation
 
 
-def create_encoder(embed_size, pretrained=True, dropout = 0.2):
-    efficient_net = models.efficientnet_v2_s(pretrained=pretrained)
-    for param in efficient_net.parameters():
+def create_encoder(embed_size, dropout = 0.2, pretrained=True):
+    backbone = models.mobilenet_v3_small(models.MobileNet_V3_Small_Weights)
+    for param in backbone.parameters():
         param.requires_grad_(not pretrained)
     
-    modules = list(efficient_net.children())[:-1]
-    cnn = nn.Sequential(*modules)
+    modules = list(backbone.children())
+    cnn = modules[0]
+    
 
-    cnn.add_module("conv_output", Conv2dNormActivation(efficient_net.classifier[1].in_features, embed_size,activation_layer=nn.Mish))
+    cnn.add_module("conv_output", Conv2dNormActivation(modules[-1][0].in_features, embed_size,activation_layer=nn.Mish))
     cnn.add_module("pool", nn.AdaptiveAvgPool2d(1))
     
     cnn.add_module("flatten",nn.Flatten())
@@ -24,6 +25,7 @@ def create_encoder(embed_size, pretrained=True, dropout = 0.2):
     
     return cnn
     
+
 
 class DecoderRNN(nn.Module):
     def __init__(self, embed_size:int, hidden_size:int, vocab_size:int, num_layers:int=1, dropout=0.2):
@@ -47,7 +49,7 @@ class DecoderRNN(nn.Module):
         state = self.init_hidden(batch_size)
 
         embeds = self.embed(captions)
-        inputs = torch.cat((features.unsqueeze(dim=1),embeds), dim=1)
+        inputs = torch.cat((features,embeds), dim=1)
 
         x, state = self._forward(inputs, state)
 
@@ -98,6 +100,7 @@ class DecoderRNN(nn.Module):
             c = c.to("cuda")
         
         return h,c
+    
 
 class ImageCaptioner(nn.Module):
     def __init__(self, embed_size:int, hidden_size:int, vocab_size:int, num_layers:int=1, pretreined:bool=True, dropout=0.2) -> None:
@@ -106,12 +109,12 @@ class ImageCaptioner(nn.Module):
         self.decoder = DecoderRNN(embed_size, hidden_size, vocab_size, num_layers, dropout)
     
     def forward(self, images, captions):
-        features = self.encoder(images)
+        features = self.encoder(images).unsqueeze(dim=1)
         outputs = self.decoder(features, captions)
         return outputs
     
     def sample(self, image, max_len=20):
-        features = self.encoder(image).unsqueeze(1)
+        features = self.encoder(image).unsqueeze(dim=1)
         captions = self.decoder.sample(features, max_len)
         return captions
 

@@ -19,8 +19,8 @@ batch_group_size = 1   # batch group size
 batch_size = 64          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = True    # if True, load existing vocab file
-embed_size = 1024           # dimensionality of image and word embeddings
-hidden_size = 1024          # number of features in hidden state of the RNN decoder
+embed_size = 64           # dimensionality of image and word embeddings
+hidden_size = 64          # number of features in hidden state of the RNN decoder
 num_epochs = 10             # number of training epochs
 save_every = 1000             # determines frequency of saving model weights
 num_layers = 3
@@ -65,7 +65,7 @@ training_params = {"opt":opt_name,
                    "vocab_size":vocab_size}
 
 # Initialize the encoder and decoder. 
-model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=True)
+model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=False)
 
 # Move models to GPU if CUDA is available. 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
