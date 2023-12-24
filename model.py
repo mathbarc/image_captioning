@@ -6,7 +6,7 @@ from torchvision.ops import Conv2dNormActivation
 
 
 def create_encoder(embed_size, dropout = 0.2, pretrained=True):
-    backbone = models.mobilenet_v3_small(models.MobileNet_V3_Small_Weights)
+    backbone = models.mobilenet_v3_small(models.MobileNet_V3_Small_Weights.IMAGENET1K_V1)
     for param in backbone.parameters():
         param.requires_grad_(not pretrained)
     
@@ -14,11 +14,9 @@ def create_encoder(embed_size, dropout = 0.2, pretrained=True):
     cnn = modules[0]
     
 
-    cnn.add_module("conv_output", Conv2dNormActivation(modules[-1][0].in_features, embed_size,activation_layer=nn.Mish))
+    cnn.add_module("conv_output", Conv2dNormActivation(cnn[-1].out_channels, embed_size,activation_layer=nn.Mish))
     cnn.add_module("pool", nn.AdaptiveAvgPool2d(1))
-    
     cnn.add_module("flatten",nn.Flatten())
-
     cnn.add_module("dropout",nn.Dropout(dropout))
     # cnn.add_module("features", nn.Linear(efficient_net.classifier[1].in_features, embed_size))
     # cnn.add_module("activation",nn.Tanh())
@@ -42,29 +40,34 @@ class DecoderRNN(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         self.linear = nn.Linear(self.hidden_size, self.vocab_size)
+
+        self.output_activation = nn.LogSoftmax(-1)
     
-    def forward(self, features, captions):
+    def forward(self, features, captions, hidden):
         captions = captions[:,:-1]
-        batch_size = features.size()[0]
-        state = self.init_hidden(batch_size)
 
         embeds = self.embed(captions)
         inputs = torch.cat((features,embeds), dim=1)
 
-        x, state = self._forward(inputs, state)
-
-        return x
+        return self._forward(inputs, hidden)
     
-    def _forward(self, inputs, state):
+    def _forward(self, inputs, hidden):
 
-        x, state = self.rnn(inputs, state)
+        x, hidden = self.rnn(inputs, hidden)
 
         x = self.dropout(x)
 
         x = self.linear(x)
 
-        return x, state
+        x = self.output_activation(x)
 
+        return x, hidden
+
+    def repackage_hidden(self, h):
+        if isinstance(h, torch.Tensor):
+            return h.detach()
+        else:
+            return tuple(self.repackage_hidden(v) for v in h)
 
     def sample(self, inputs, max_len=20):
         " accepts pre-processed image tensor (inputs) and returns predicted sentence (list of token ids of length max_len) "
@@ -105,13 +108,12 @@ class DecoderRNN(nn.Module):
 class ImageCaptioner(nn.Module):
     def __init__(self, embed_size:int, hidden_size:int, vocab_size:int, num_layers:int=1, pretreined:bool=True, dropout=0.2) -> None:
         super().__init__()
-        self.encoder = create_encoder(embed_size, pretreined)
+        self.encoder = create_encoder(embed_size, dropout, pretreined)
         self.decoder = DecoderRNN(embed_size, hidden_size, vocab_size, num_layers, dropout)
     
-    def forward(self, images, captions):
+    def forward(self, images, captions, hidden):
         features = self.encoder(images).unsqueeze(dim=1)
-        outputs = self.decoder(features, captions)
-        return outputs
+        return self.decoder(features, captions, hidden)
     
     def sample(self, image, max_len=20):
         features = self.encoder(image).unsqueeze(dim=1)
@@ -136,3 +138,9 @@ def get_inference_transform():
         transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
 
+if __name__=="__main__":
+    cnn = ImageCaptioner(1024, 1024, 4376, 3)
+
+    print(cnn)
+
+    

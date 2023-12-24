@@ -16,19 +16,20 @@ import mlflow
 
 ## TODO #1: Select appropriate values for the Python variables below.
 batch_group_size = 1   # batch group size
-batch_size = 64          # batch size
+batch_size = 8          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = True    # if True, load existing vocab file
-embed_size = 64           # dimensionality of image and word embeddings
-hidden_size = 64          # number of features in hidden state of the RNN decoder
+embed_size = 512           # dimensionality of image and word embeddings
+hidden_size = 256         # number of features in hidden state of the RNN decoder
 num_epochs = 10             # number of training epochs
 save_every = 1000             # determines frequency of saving model weights
-num_layers = 3
+num_layers = 1
 lr = 1e-3
 last_every = 100
 opt_name = "adam"
 scheduler_name = "cosine_annealing"
 dropout = 0.3
+grad_clip = 1
 
 transform_train = get_transform()
 
@@ -62,10 +63,11 @@ training_params = {"opt":opt_name,
                    "dropout": dropout,
                    "num_epochs":num_epochs, 
                    "batch_group_size":batch_group_size, 
-                   "vocab_size":vocab_size}
+                   "vocab_size":vocab_size,
+                   "grad_clip":grad_clip}
 
 # Initialize the encoder and decoder. 
-model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=False)
+model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=True)
 
 # Move models to GPU if CUDA is available. 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -111,6 +113,8 @@ if scheduler_name == "cosine_annealing":
 
 acc_loss = 0
 
+hidden = model.decoder.init_hidden(batch_size)
+
 for i_step in tqdm.tqdm(range(1, total_step+1)):
 
     # Randomly sample a caption length, and sample indices with that length.
@@ -131,14 +135,16 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
         model.zero_grad()
     
     # Pass the inputs through the CNN-RNN model.
-    outputs = model(images, captions)
+    output, hidden = model(images, captions, hidden)
+    hidden = model.decoder.repackage_hidden(hidden)
     
     # Calculate the batch loss.
-    loss = criterion(outputs.view(-1, vocab_size), captions.view(-1))
+    loss = criterion(output.view(-1, vocab_size), captions.view(-1))
     acc_loss += loss.item()
 
     # Backward pass.
     loss.backward()
+    torch.nn.utils.clip_grad_norm_(params, grad_clip)
     
         
     # Get training statistics.
@@ -158,9 +164,14 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
 
     if int(((i_step)/batch_group_size)%last_every)==last_every-1:
         mlflow.pytorch.log_model(model,f"image_captioner_last",extra_files=["model.py"])
+
+
+    
             
     # Save the weights.
     if (i_step-1)%save_every == save_every - 1:
+
+        hidden_val = model.decoder.init_hidden(batch_size)
 
         mlflow.pytorch.log_model(model,f"{i_step}/image_captioner",extra_files=["model.py"])
         # torch.save(model, os.path.join('./models', 'image_captioner-%d.pkl' % epoch))
@@ -184,10 +195,11 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
             images = images.to(device)
             captions = captions.to(device)
 
-            outputs = model(images, captions)
+            output, hidden_val = model(images, captions, hidden_val)
+            hidden_val = model.decoder.repackage_hidden(hidden_val)
             
             # Calculate the batch loss.
-            loss = criterion(outputs.view(-1, vocab_size), captions.view(-1))
+            loss = criterion(output.view(-1, vocab_size), captions.view(-1))
             acc_test_loss += loss.item()
             count+=1
         
