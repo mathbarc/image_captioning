@@ -14,12 +14,11 @@ def create_encoder(embed_size, dropout = 0.2, pretrained=True):
     cnn = modules[0]
     
 
-    cnn.add_module("conv_output", Conv2dNormActivation(cnn[-1].out_channels, embed_size,activation_layer=nn.Mish))
+    cnn.add_module("conv_output", Conv2dNormActivation(cnn[-1].out_channels, embed_size,activation_layer=None))
+    cnn.add_module("activation", nn.Tanhshrink())
     cnn.add_module("pool", nn.AdaptiveAvgPool2d(1))
     cnn.add_module("flatten",nn.Flatten())
     cnn.add_module("dropout",nn.Dropout(dropout))
-    # cnn.add_module("features", nn.Linear(efficient_net.classifier[1].in_features, embed_size))
-    # cnn.add_module("activation",nn.Tanh())
     
     return cnn
     
@@ -41,7 +40,7 @@ class DecoderRNN(nn.Module):
 
         self.linear = nn.Linear(self.hidden_size, self.vocab_size)
 
-        self.output_activation = nn.LogSoftmax(-1)
+        # self.output_activation = nn.LogSoftmax(-1)
     
     def forward(self, features, captions, hidden):
         captions = captions[:,:-1]
@@ -59,7 +58,7 @@ class DecoderRNN(nn.Module):
 
         x = self.linear(x)
 
-        x = self.output_activation(x)
+        # x = self.output_activation(x)
 
         return x, hidden
 
@@ -126,16 +125,16 @@ def get_transform():
     return transforms.Compose([ 
         transforms.ToTensor(),
         transforms.Resize(480,antialias=True),
-        transforms.RandomCrop(384),
+        transforms.RandomCrop(416),
         transforms.RandomHorizontalFlip(), 
-        transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
+        #transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
 
 def get_inference_transform():
     return transforms.Compose([ 
         transforms.ToTensor(),
-        transforms.Resize(384,antialias=True),
-        transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
+        transforms.Resize(416,antialias=True),
+        #transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
 
 if __name__=="__main__":

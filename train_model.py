@@ -18,16 +18,16 @@ import mlflow
 batch_group_size = 1   # batch group size
 batch_size = 8          # batch size
 vocab_threshold = 20        # minimum word count threshold
-vocab_from_file = True    # if True, load existing vocab file
-embed_size = 512           # dimensionality of image and word embeddings
-hidden_size = 256         # number of features in hidden state of the RNN decoder
+vocab_from_file = False    # if True, load existing vocab file
+embed_size = 1024           # dimensionality of image and word embeddings
+hidden_size = 512         # number of features in hidden state of the RNN decoder
 num_epochs = 10             # number of training epochs
 save_every = 1000             # determines frequency of saving model weights
-num_layers = 1
+num_layers = 3
 lr = 1e-3
 last_every = 100
 opt_name = "adam"
-scheduler_name = "cosine_annealing"
+scheduler_name = "constant"
 dropout = 0.3
 grad_clip = 1
 
@@ -67,7 +67,7 @@ training_params = {"opt":opt_name,
                    "grad_clip":grad_clip}
 
 # Initialize the encoder and decoder. 
-model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=True)
+model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=False)
 
 # Move models to GPU if CUDA is available. 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -108,12 +108,15 @@ elif opt_name == "rprop":
 
 if scheduler_name == "step":
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, total_step/20, 0.1)
-if scheduler_name == "cosine_annealing":
+elif scheduler_name == "cosine_annealing":
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step)
+elif scheduler_name == "constant":
+    scheduler = None
 
 acc_loss = 0
 
 hidden = model.decoder.init_hidden(batch_size)
+best_loss = 100
 
 for i_step in tqdm.tqdm(range(1, total_step+1)):
 
@@ -133,6 +136,7 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     if (i_step-1)%batch_group_size == 0:
         # Zero the gradients.
         model.zero_grad()
+        acc_loss = 0
     
     # Pass the inputs through the CNN-RNN model.
     output, hidden = model(images, captions, hidden)
@@ -151,29 +155,28 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     if (i_step-1)%batch_group_size == batch_group_size-1:
         # Update the parameters in the optimizer.
         optimizer.step()
-        scheduler.step()
+        if scheduler is not None:
+            scheduler.step()
         
         
     if int(((i_step)/batch_group_size)%batch_group_size)==batch_group_size-1:
         acc_loss = acc_loss/batch_group_size
-        stats = {"loss": acc_loss, "lr":scheduler.get_last_lr()[0]}
+        if scheduler is not None:
+            current_lr = scheduler.get_last_lr()[0]
+        else:
+            current_lr = lr
+        stats = {"loss": acc_loss, "lr":current_lr}
         mlflow.log_metrics(stats, i_step)
     
-    if (i_step-1)%batch_group_size == batch_group_size-1:
-        acc_loss = 0
-
+    
     if int(((i_step)/batch_group_size)%last_every)==last_every-1:
-        mlflow.pytorch.log_model(model,f"image_captioner_last",extra_files=["model.py"])
-
+        mlflow.pytorch.log_model(model,"last",extra_files=["model.py"])
 
     
-            
     # Save the weights.
     if (i_step-1)%save_every == save_every - 1:
 
         hidden_val = model.decoder.init_hidden(batch_size)
-
-        mlflow.pytorch.log_model(model,f"{i_step}/image_captioner",extra_files=["model.py"])
         # torch.save(model, os.path.join('./models', 'image_captioner-%d.pkl' % epoch))
 
         model.eval()
@@ -190,8 +193,6 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
 
             images, captions = next(iter(data_loader_valid))
 
-            model.zero_grad()
-
             images = images.to(device)
             captions = captions.to(device)
 
@@ -206,6 +207,10 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
         acc_test_loss = acc_test_loss/count
         stats = {"loss_valid": acc_test_loss}
         mlflow.log_metrics(stats, i_step)
+
+        if best_loss > acc_test_loss:
+            best_loss = acc_test_loss
+            mlflow.pytorch.log_model(model,"best",extra_files=["model.py"])
 
         model.train()
             

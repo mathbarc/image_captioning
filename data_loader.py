@@ -135,6 +135,7 @@ class CoCoDataset(data.Dataset):
                 self.coco.download(self.img_folder, [img_id])
 
             image = cv2.imread(path)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             
             size = image.shape
 
@@ -165,7 +166,7 @@ class CoCoDataset(data.Dataset):
         else:
             path = self.paths[index]
             image = cv2.imread(os.path.join(self.img_folder, path))
-            # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             size = image.shape
 
@@ -208,11 +209,12 @@ if __name__=="__main__":
 
     transform_train = transforms.Compose([ 
     transforms.ToTensor(),
-    transforms.Resize(256, antialias=True),                          # smaller edge of image resized to 256
-    transforms.RandomCrop(224),                      # get 224x224 crop from random location
+    transforms.Resize(480, antialias=True),                          # smaller edge of image resized to 256
+    transforms.RandomCrop(416),                      # get 224x224 crop from random location
     transforms.RandomHorizontalFlip(),               # horizontally flip image with probability=0.5
-    transforms.Normalize((0.485, 0.456, 0.406),      # normalize image for pre-trained model
-                         (0.229, 0.224, 0.225))])
+    #transforms.Normalize((0.5, 0.5, 0.5),      # normalize image for pre-trained model
+    #                     (0.5, 0.5, 0.5))
+    ])
 
     # Set the minimum word count threshold.
     vocab_threshold = 5
