@@ -19,7 +19,7 @@ batch_group_size = 1   # batch group size
 batch_size = 8          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = False    # if True, load existing vocab file
-embed_size = 1024           # dimensionality of image and word embeddings
+embed_size = 256           # dimensionality of image and word embeddings
 hidden_size = 512         # number of features in hidden state of the RNN decoder
 num_epochs = 10             # number of training epochs
 save_every = 1000             # determines frequency of saving model weights
@@ -27,9 +27,8 @@ num_layers = 3
 lr = 1e-3
 last_every = 100
 opt_name = "adam"
-scheduler_name = "constant"
+scheduler_name = "step"
 dropout = 0.3
-grad_clip = 1
 
 transform_train = get_transform()
 
@@ -63,8 +62,7 @@ training_params = {"opt":opt_name,
                    "dropout": dropout,
                    "num_epochs":num_epochs, 
                    "batch_group_size":batch_group_size, 
-                   "vocab_size":vocab_size,
-                   "grad_clip":grad_clip}
+                   "vocab_size":vocab_size}
 
 # Initialize the encoder and decoder. 
 model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=False)
@@ -85,7 +83,7 @@ params = list(model.encoder.parameters())+list(model.decoder.parameters())
 
 
 # Set the total number of training steps per epoch.
-total_step = 20000
+total_step = 50000
 # total_step = 2000
 
 mlflow.set_tracking_uri("http://mlflow.cluster.local")
@@ -107,7 +105,7 @@ elif opt_name == "rprop":
     optimizer = torch.optim.Rprop(params,lr)
 
 if scheduler_name == "step":
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, total_step/20, 0.1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, int(total_step/5), 0.1)
 elif scheduler_name == "cosine_annealing":
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step)
 elif scheduler_name == "constant":
@@ -148,12 +146,17 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
 
     # Backward pass.
     loss.backward()
-    torch.nn.utils.clip_grad_norm_(params, grad_clip)
+    
     
         
     # Get training statistics.
-    if (i_step-1)%batch_group_size == batch_group_size-1:
-        # Update the parameters in the optimizer.
+    if batch_group_size > 1:
+        if (i_step-1)%batch_group_size == batch_group_size-1:
+            # Update the parameters in the optimizer.
+            optimizer.step()
+            if scheduler is not None:
+                scheduler.step()
+    else:
         optimizer.step()
         if scheduler is not None:
             scheduler.step()

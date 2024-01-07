@@ -6,7 +6,7 @@ from torchvision.ops import Conv2dNormActivation
 
 
 def create_encoder(embed_size, dropout = 0.2, pretrained=True):
-    backbone = models.mobilenet_v3_small(models.MobileNet_V3_Small_Weights.IMAGENET1K_V1)
+    backbone = models.mobilenet_v3_large(models.MobileNet_V3_Large_Weights.IMAGENET1K_V1)
     for param in backbone.parameters():
         param.requires_grad_(not pretrained)
     
@@ -125,7 +125,6 @@ def get_transform():
     return transforms.Compose([ 
         transforms.ToTensor(),
         transforms.Resize(480,antialias=True),
-        transforms.RandomCrop(416),
         transforms.RandomHorizontalFlip(), 
         #transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
@@ -133,7 +132,7 @@ def get_transform():
 def get_inference_transform():
     return transforms.Compose([ 
         transforms.ToTensor(),
-        transforms.Resize(416,antialias=True),
+        transforms.Resize(480,antialias=True),
         #transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
 
