@@ -21,7 +21,7 @@ vocab_from_file = False    # if True, load existing vocab file
 num_epochs = 10             # number of training epochs
 save_every = 1000             # determines frequency of saving model weights
 num_layers = 2
-lr = 1e-4
+lr = 1e-3
 last_every = 100
 opt_name = "adam"
 scheduler_name = "step"
@@ -111,7 +111,7 @@ elif scheduler_name == "constant":
 
 acc_loss = 0
 
-hidden = model.decoder.init_hidden(batch_size)
+
 best_loss = 100
 
 for i_step in tqdm.tqdm(range(1, total_step+1)):
@@ -134,9 +134,10 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     # Zero the gradients.
     optimizer.zero_grad()
     
+    hidden = model.decoder.init_hidden(batch_size)
     # Pass the inputs through the CNN-RNN model.
     output, hidden = model(images, captions, hidden)
-    hidden = model.decoder.repackage_hidden(hidden)
+    # hidden = model.decoder.repackage_hidden(hidden)
     
     # Calculate the batch loss.
     loss = criterion(output.view(-1, vocab_size), captions.view(-1))

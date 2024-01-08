@@ -11,13 +11,17 @@ def create_encoder(embed_size, dropout = 0.2, pretrained=True):
     for param in backbone.parameters():
         param.requires_grad_(not pretrained)
     
+    modules = list(backbone.children())
+
     cnn = nn.Sequential()
-    cnn.add_module("backbone", backbone)
+    cnn.add_module("backbone", modules[0])
 
     neck = nn.Sequential()
     
-    neck.add_module("linear", nn.Linear(1000, embed_size))
-    neck.add_module("activation", nn.Tanhshrink())
+    neck.add_module("conv_output", Conv2dNormActivation(modules[0][-1].out_channels, embed_size,activation_layer=None))
+    neck.add_module("activation", nn.Tanh())
+    neck.add_module("pool", nn.AdaptiveAvgPool2d(1))
+    neck.add_module("flatten",nn.Flatten())
     neck.add_module("dropout",nn.Dropout(dropout))
 
     cnn.add_module("neck", neck)
@@ -60,7 +64,7 @@ class DecoderRNN(nn.Module):
 
         x = self.linear(x)
 
-        # x = self.output_activation(x)
+        x = self.output_activation(x)
 
         return x, hidden
 
