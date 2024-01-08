@@ -2,23 +2,25 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 from torchvision import transforms
+from torchvision.transforms.v2 import RandomResize
 from torchvision.ops import Conv2dNormActivation
 
 
 def create_encoder(embed_size, dropout = 0.2, pretrained=True):
-    backbone = models.mobilenet_v3_large(models.MobileNet_V3_Large_Weights.IMAGENET1K_V1)
+    backbone = models.mobilenet_v3_small(models.MobileNet_V3_Small_Weights.DEFAULT)
     for param in backbone.parameters():
         param.requires_grad_(not pretrained)
     
-    modules = list(backbone.children())
-    cnn = modules[0]
-    
+    cnn = nn.Sequential()
+    cnn.add_module("backbone", backbone)
 
-    cnn.add_module("conv_output", Conv2dNormActivation(cnn[-1].out_channels, embed_size,activation_layer=None))
-    cnn.add_module("activation", nn.Tanhshrink())
-    cnn.add_module("pool", nn.AdaptiveAvgPool2d(1))
-    cnn.add_module("flatten",nn.Flatten())
-    cnn.add_module("dropout",nn.Dropout(dropout))
+    neck = nn.Sequential()
+    
+    neck.add_module("linear", nn.Linear(1000, embed_size))
+    neck.add_module("activation", nn.Tanhshrink())
+    neck.add_module("dropout",nn.Dropout(dropout))
+
+    cnn.add_module("neck", neck)
     
     return cnn
     
@@ -40,7 +42,7 @@ class DecoderRNN(nn.Module):
 
         self.linear = nn.Linear(self.hidden_size, self.vocab_size)
 
-        # self.output_activation = nn.LogSoftmax(-1)
+        self.output_activation = nn.Softmax(-1)
     
     def forward(self, features, captions, hidden):
         captions = captions[:,:-1]
@@ -123,22 +125,23 @@ class ImageCaptioner(nn.Module):
 
 def get_transform():
     return transforms.Compose([ 
-        transforms.ToTensor(),
-        transforms.Resize(480,antialias=True),
-        transforms.RandomHorizontalFlip(), 
+        transforms.Resize(480,antialias=True), 
+        transforms.ColorJitter(0.1,0.1,0.1,0.025),
+        transforms.GaussianBlur(3,(0.1,2.8)),
+        RandomResize(238, 516)
         #transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
 
 def get_inference_transform():
     return transforms.Compose([ 
-        transforms.ToTensor(),
         transforms.Resize(480,antialias=True),
         #transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
         ])
 
 if __name__=="__main__":
-    cnn = ImageCaptioner(1024, 1024, 4376, 3)
+    cnn = ImageCaptioner(256, 512, 4532, 2)
 
     print(cnn)
+    torch.save(cnn, "sample.pth")
 
     

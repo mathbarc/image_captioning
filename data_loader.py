@@ -4,6 +4,7 @@ import torch
 import torch.utils.data as data
 from vocabulary import Vocabulary
 from torchvision import io
+from torchvision.transforms.functional import to_tensor
 import cv2
 from pycocotools.coco import COCO
 import numpy as np
@@ -12,8 +13,24 @@ import random
 import json
 import config
 
-def get_loader(transform,
-               mode='train',
+def letterbox_image(img):
+    '''resize image with unchanged aspect ratio using padding'''
+    img_w, img_h = img.shape[1], img.shape[0]
+    if img_w > img_h:
+        dim = img_w
+    else:
+        dim = img_h
+    
+    canvas = np.zeros((dim, dim, 3), img.dtype)
+    
+    x = int((dim-img_w)/2)
+    y = int((dim-img_h)/2)
+	
+    canvas[y:y+img_h, x:x+img_w, :] = img
+    
+    return canvas
+
+def get_loader(mode='train',
                batch_size=1,
                vocab_threshold=None,
                vocab_file='./vocab.pkl',
@@ -26,7 +43,6 @@ def get_loader(transform,
                download_directly=False):
     """Returns the data loader.
     Args:
-      transform: Image transform.
       mode: One of 'train' or 'test'.
       batch_size: Batch size (if in testing mode, must have batch_size=1).
       vocab_threshold: Minimum word count threshold.
@@ -64,8 +80,7 @@ def get_loader(transform,
         annotations_file = os.path.join(cocoapi_loc, 'annotations/captions_val2014.json')
 
     # COCO caption dataset.
-    dataset = CoCoDataset(transform=transform,
-                          mode=mode,
+    dataset = CoCoDataset(mode=mode,
                           batch_size=batch_size,
                           vocab_threshold=vocab_threshold,
                           vocab_file=vocab_file,
@@ -98,9 +113,8 @@ def get_loader(transform,
 
 class CoCoDataset(data.Dataset):
     
-    def __init__(self, transform, mode, batch_size, vocab_threshold, vocab_file, start_word, 
+    def __init__(self, mode, batch_size, vocab_threshold, vocab_file, start_word, 
         end_word, unk_word, annotations_file, vocab_from_file, img_folder, download_directly):
-        self.transform = transform
         self.mode = mode
         self.batch_size = batch_size
         self.vocab = Vocabulary(vocab_threshold, vocab_file, start_word,
@@ -137,17 +151,11 @@ class CoCoDataset(data.Dataset):
             image = cv2.imread(path)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             
-            size = image.shape
+            image = letterbox_image(image)
+            image=cv2.resize(image, (640,640))
 
-            if size[0] < size[1]:
-                diff = int((size[1]-size[0])/2)
-                image = image[0:size[0], diff:diff+size[0]]
-            else:
-                diff = int((size[0]-size[1])/2)
-                image = image[diff:diff+size[1], 0:size[1]]
+            image = to_tensor(image)
             
-            # Convert image to tensor and pre-process using transform
-            image = self.transform(image)
 
             # Convert caption to tensor of word ids.
             tokens = nltk.tokenize.word_tokenize(str(caption).lower())
@@ -165,22 +173,16 @@ class CoCoDataset(data.Dataset):
         # obtain image if in test mode
         else:
             path = self.paths[index]
-            image = cv2.imread(os.path.join(self.img_folder, path))
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            original_image = cv2.imread(os.path.join(self.img_folder, path))
+            original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
 
-            size = image.shape
+            image = letterbox_image(original_image)
+            image = cv2.resize(image, (640,640))
 
-            if size[0] < size[1]:
-                diff = int((size[1]-size[0])/2)
-                image = image[0:size[0], diff:diff+size[0]]
-            else:
-                diff = int((size[0]-size[1])/2)
-                image = image[diff:diff+size[1], 0:size[1]]
-            
-            transformed_image = self.transform(image)
+            image = to_tensor(image)
 
             # return original image and pre-processed image tensor
-            return image, transformed_image
+            return original_image, image
 
     def get_train_indices(self):
         sel_length = np.random.choice(self.caption_lengths)
@@ -222,7 +224,7 @@ if __name__=="__main__":
     # Specify the batch size.
     batch_size = 10
 
-    data_loader = get_loader(transform=transform_train,
+    data_loader = get_loader(
                          mode='train',
                          batch_size=batch_size,
                          vocab_from_file=True)
