@@ -7,7 +7,7 @@ from torchvision.ops import Conv2dNormActivation
 
 
 def create_encoder(embed_size, dropout = 0.2, pretrained=True):
-    backbone = models.mobilenet_v3_small(models.MobileNet_V3_Small_Weights.DEFAULT)
+    backbone = models.efficientnet_v2_l(models.EfficientNet_V2_L_Weights.DEFAULT)
     for param in backbone.parameters():
         param.requires_grad_(not pretrained)
     
@@ -18,8 +18,7 @@ def create_encoder(embed_size, dropout = 0.2, pretrained=True):
 
     neck = nn.Sequential()
     
-    neck.add_module("conv_output", Conv2dNormActivation(modules[0][-1].out_channels, embed_size,activation_layer=None))
-    neck.add_module("activation", nn.Tanh())
+    neck.add_module("conv_output", Conv2dNormActivation(modules[0][-1].out_channels, embed_size,activation_layer=nn.Mish))
     neck.add_module("pool", nn.AdaptiveAvgPool2d(1))
     neck.add_module("flatten",nn.Flatten())
     neck.add_module("dropout",nn.Dropout(dropout))
@@ -46,7 +45,7 @@ class DecoderRNN(nn.Module):
 
         self.linear = nn.Linear(self.hidden_size, self.vocab_size)
 
-        self.output_activation = nn.Softmax(-1)
+        self.output_activation = nn.LogSoftmax(-1)
     
     def forward(self, features, captions, hidden):
         captions = captions[:,:-1]
@@ -129,21 +128,20 @@ class ImageCaptioner(nn.Module):
 
 def get_transform():
     return transforms.Compose([ 
-        transforms.Resize(480,antialias=True), 
         transforms.ColorJitter(0.1,0.1,0.1,0.025),
         transforms.GaussianBlur(3,(0.1,2.8)),
-        RandomResize(238, 516)
-        #transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
+        RandomResize(238, 516),
+        transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
         ])
 
 def get_inference_transform():
     return transforms.Compose([ 
         transforms.Resize(480,antialias=True),
-        #transforms.Normalize((0.485, 0.456, 0.406),(0.229, 0.224, 0.225)),
+        transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
         ])
 
 if __name__=="__main__":
-    cnn = ImageCaptioner(256, 512, 4532, 2)
+    cnn = ImageCaptioner(1024, 1024, 4532, 2)
 
     print(cnn)
     torch.save(cnn, "sample.pth")

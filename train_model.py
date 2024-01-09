@@ -46,8 +46,8 @@ data_loader_valid = get_loader(mode='valid',
 
 # The size of the vocabulary.
 vocab_size = len(data_loader.dataset.vocab)
-embed_size = 256           # dimensionality of image and word embeddings
-hidden_size = 512         # number of features in hidden state of the RNN decoder
+embed_size = 1024           # dimensionality of image and word embeddings
+hidden_size = 1024         # number of features in hidden state of the RNN decoder
 training_params = {"opt":opt_name,
                    "scheduler":scheduler_name, 
                    "num_layers":num_layers, 
@@ -61,7 +61,7 @@ training_params = {"opt":opt_name,
                    "vocab_size":vocab_size}
 
 # Initialize the encoder and decoder. 
-model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=False)
+model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=True)
 model.train()
 
 # Move models to GPU if CUDA is available. 
