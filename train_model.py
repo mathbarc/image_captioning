@@ -15,7 +15,7 @@ import mlflow
 
 
 ## TODO #1: Select appropriate values for the Python variables below.
-batch_size = 80          # batch size
+batch_size = 64          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = False    # if True, load existing vocab file
 num_epochs = 10             # number of training epochs
@@ -24,8 +24,8 @@ num_layers = 2
 lr = 1e-3
 last_every = 100
 opt_name = "adam"
-scheduler_name = "step"
-dropout = 0.1
+scheduler_name = "cosine_annealing"
+dropout = 0.4
 
 transform_train = get_transform()
 
@@ -46,8 +46,8 @@ data_loader_valid = get_loader(mode='valid',
 
 # The size of the vocabulary.
 vocab_size = len(data_loader.dataset.vocab)
-embed_size = 1024           # dimensionality of image and word embeddings
-hidden_size = 1024         # number of features in hidden state of the RNN decoder
+embed_size = 256           # dimensionality of image and word embeddings
+hidden_size = 256         # number of features in hidden state of the RNN decoder
 training_params = {"opt":opt_name,
                    "scheduler":scheduler_name, 
                    "num_layers":num_layers, 
@@ -73,7 +73,7 @@ model.to(device)
 # decoder.load_state_dict(torch.load(os.path.join('./models/decoder-4.pkl'),map_location=device))
 
 # Define the loss function. 
-criterion = nn.CrossEntropyLoss(reduction="mean").cuda() if torch.cuda.is_available() else nn.CrossEntropyLoss(reduction="mean")
+criterion = nn.CrossEntropyLoss().cuda() if torch.cuda.is_available() else nn.CrossEntropyLoss()
 
 # TODO #3: Specify the learnable parameters of the model.
 # params = list(model.encoder.parameters())+list(model.decoder.parameters())
@@ -81,7 +81,7 @@ params = model.parameters()
 
 
 # Set the total number of training steps per epoch.
-total_step = 2000
+total_step = math.ceil(len(data_loader.dataset.caption_lengths) / batch_size) * num_epochs
 # total_step = 2000
 
 mlflow.set_tracking_uri("http://mlflow.cluster.local")
@@ -99,19 +99,19 @@ if opt_name == "adam":
         optimizer = torch.optim.Adam(params,lr)
 elif opt_name == "sgd":
     optimizer = torch.optim.SGD(params,lr)
+elif opt_name == "asgd":
+    optimizer = torch.optim.ASGD(params,lr)
 elif opt_name == "rprop":
     optimizer = torch.optim.Rprop(params,lr)
 
 if scheduler_name == "step":
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, int(total_step/2), 0.1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, int(total_step/10), 0.1)
 elif scheduler_name == "cosine_annealing":
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step)
 elif scheduler_name == "constant":
     scheduler = None
 
 acc_loss = 0
-
-
 best_loss = 100
 
 for i_step in tqdm.tqdm(range(1, total_step+1)):
@@ -129,15 +129,13 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     # Move batch of images and captions to GPU if CUDA is available.
     images = images.to(device)
     captions = captions.to(device)
-
     
     # Zero the gradients.
-    optimizer.zero_grad()
+    model.encoder.zero_grad()
+    model.decoder.zero_grad()
     
-    hidden = model.decoder.init_hidden(batch_size)
     # Pass the inputs through the CNN-RNN model.
-    output, hidden = model(images, captions, hidden)
-    # hidden = model.decoder.repackage_hidden(hidden)
+    output = model(images, captions)
     
     # Calculate the batch loss.
     loss = criterion(output.view(-1, vocab_size), captions.view(-1))
@@ -146,11 +144,13 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     # Backward pass.
     loss.backward()
 
-    torch.nn.utils.clip_grad_norm_(params, 1)
+    #torch.nn.utils.clip_grad_norm_(params, 4)
     optimizer.step()
     if scheduler is not None:
         scheduler.step()
         
+    
+    
     if scheduler is not None:
         current_lr = scheduler.get_last_lr()[0]
     else:
@@ -158,11 +158,11 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     stats = {"loss": acc_loss, "lr":current_lr}
     mlflow.log_metrics(stats, i_step)
     
-    
     if int(i_step%last_every)==last_every-1:
-        mlflow.pytorch.log_model(model,"last",extra_files=["model.py"])
-
+        # mlflow.pytorch.log_model(model,"last",extra_files=["model.py"])
+        torch.save(model, "model_last.pth")
     
+
     # Save the weights.
     # if (i_step-1)%save_every == save_every - 1:
 

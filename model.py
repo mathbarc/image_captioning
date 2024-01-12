@@ -13,13 +13,15 @@ def create_encoder(embed_size, dropout = 0.2, pretrained=True):
     
     modules = list(backbone.children())
 
+
     cnn = nn.Sequential()
-    cnn.add_module("backbone", modules[0])
+    cnn.add_module("backbone", nn.Sequential(*(modules[:-1])))
 
     neck = nn.Sequential()
     
-    neck.add_module("conv_output", Conv2dNormActivation(modules[0][-1].out_channels, embed_size,activation_layer=nn.Mish))
-    neck.add_module("pool", nn.AdaptiveAvgPool2d(1))
+    neck.add_module("conv_output", Conv2dNormActivation(modules[2][-1].in_features, embed_size, 1,activation_layer=None))
+    # neck.add_module("activation", nn.Tanh())
+    neck.add_module("pool", nn.AdaptiveMaxPool2d(1))
     neck.add_module("flatten",nn.Flatten())
     neck.add_module("dropout",nn.Dropout(dropout))
 
@@ -30,7 +32,7 @@ def create_encoder(embed_size, dropout = 0.2, pretrained=True):
 
 
 class DecoderRNN(nn.Module):
-    def __init__(self, embed_size:int, hidden_size:int, vocab_size:int, num_layers:int=1, dropout=0.2):
+    def __init__(self, embed_size:int, hidden_size:int, vocab_size:int, num_layers:int=1):
         super(DecoderRNN, self).__init__()
         
         self.embed_size = embed_size
@@ -39,31 +41,28 @@ class DecoderRNN(nn.Module):
         self.num_layers = num_layers
 
         self.embed = nn.Embedding(self.vocab_size, self.embed_size)
-        self.rnn = nn.LSTM(input_size = self.embed_size, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first=True, dropout = dropout)
-        
-        self.dropout = nn.Dropout(dropout)
+        self.rnn = nn.LSTM(input_size = self.embed_size, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first=True)
 
         self.linear = nn.Linear(self.hidden_size, self.vocab_size)
-
-        self.output_activation = nn.LogSoftmax(-1)
     
-    def forward(self, features, captions, hidden):
+    def forward(self, features, captions):
         captions = captions[:,:-1]
+
+        batch_size = features.size()[0]
+        state = self.init_hidden(batch_size)
 
         embeds = self.embed(captions)
         inputs = torch.cat((features,embeds), dim=1)
 
-        return self._forward(inputs, hidden)
+        result, _ = self._forward(inputs, state)
+
+        return result
     
     def _forward(self, inputs, hidden):
 
         x, hidden = self.rnn(inputs, hidden)
 
-        x = self.dropout(x)
-
         x = self.linear(x)
-
-        x = self.output_activation(x)
 
         return x, hidden
 
@@ -113,11 +112,11 @@ class ImageCaptioner(nn.Module):
     def __init__(self, embed_size:int, hidden_size:int, vocab_size:int, num_layers:int=1, pretreined:bool=True, dropout=0.2) -> None:
         super().__init__()
         self.encoder = create_encoder(embed_size, dropout, pretreined)
-        self.decoder = DecoderRNN(embed_size, hidden_size, vocab_size, num_layers, dropout)
+        self.decoder = DecoderRNN(embed_size, hidden_size, vocab_size, num_layers)
     
-    def forward(self, images, captions, hidden):
+    def forward(self, images, captions):
         features = self.encoder(images).unsqueeze(dim=1)
-        return self.decoder(features, captions, hidden)
+        return self.decoder(features, captions)
     
     def sample(self, image, max_len=20):
         features = self.encoder(image).unsqueeze(dim=1)
@@ -128,9 +127,9 @@ class ImageCaptioner(nn.Module):
 
 def get_transform():
     return transforms.Compose([ 
-        transforms.ColorJitter(0.1,0.1,0.1,0.025),
-        transforms.GaussianBlur(3,(0.1,2.8)),
-        RandomResize(238, 516),
+        # transforms.ColorJitter(0.1,0.1,0.1,0.025),
+        # transforms.GaussianBlur(3,(0.1,2.8)),
+        transforms.Resize(480,antialias=True),
         transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
         ])
 
