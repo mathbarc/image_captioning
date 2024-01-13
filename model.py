@@ -7,7 +7,7 @@ from torchvision.ops import Conv2dNormActivation
 
 
 def create_encoder(embed_size, dropout = 0.2, pretrained=True):
-    backbone = models.efficientnet_v2_l(models.EfficientNet_V2_L_Weights.DEFAULT)
+    backbone = models.mobilenet_v3_small(models.MobileNet_V3_Small_Weights.DEFAULT)
     for param in backbone.parameters():
         param.requires_grad_(not pretrained)
     
@@ -19,8 +19,8 @@ def create_encoder(embed_size, dropout = 0.2, pretrained=True):
 
     neck = nn.Sequential()
     
-    neck.add_module("conv_output", Conv2dNormActivation(modules[2][-1].in_features, embed_size, 1,activation_layer=None))
-    # neck.add_module("activation", nn.Tanh())
+    neck.add_module("conv_output", Conv2dNormActivation(modules[2][0].in_features, embed_size, 1,activation_layer=None))
+    neck.add_module("activation", nn.Tanhshrink())
     neck.add_module("pool", nn.AdaptiveMaxPool2d(1))
     neck.add_module("flatten",nn.Flatten())
     neck.add_module("dropout",nn.Dropout(dropout))
@@ -44,6 +44,7 @@ class DecoderRNN(nn.Module):
         self.rnn = nn.LSTM(input_size = self.embed_size, hidden_size = self.hidden_size, num_layers = self.num_layers, batch_first=True)
 
         self.linear = nn.Linear(self.hidden_size, self.vocab_size)
+        self.activation = nn.LogSoftmax(-1)
     
     def forward(self, features, captions):
         captions = captions[:,:-1]
@@ -63,6 +64,7 @@ class DecoderRNN(nn.Module):
         x, hidden = self.rnn(inputs, hidden)
 
         x = self.linear(x)
+        x = self.activation(x)
 
         return x, hidden
 
@@ -129,7 +131,8 @@ def get_transform():
     return transforms.Compose([ 
         # transforms.ColorJitter(0.1,0.1,0.1,0.025),
         # transforms.GaussianBlur(3,(0.1,2.8)),
-        transforms.Resize(480,antialias=True),
+        # transforms.Resize(480,antialias=True),
+        RandomResize(348, 512, antialias=True),
         transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
         ])
 

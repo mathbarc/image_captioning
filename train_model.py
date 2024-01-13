@@ -18,7 +18,7 @@ import mlflow
 batch_size = 64          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = False    # if True, load existing vocab file
-num_epochs = 10             # number of training epochs
+num_epochs = 30             # number of training epochs
 save_every = 1000             # determines frequency of saving model weights
 num_layers = 2
 lr = 1e-3
@@ -61,7 +61,7 @@ training_params = {"opt":opt_name,
                    "vocab_size":vocab_size}
 
 # Initialize the encoder and decoder. 
-model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=True)
+model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=False)
 model.train()
 
 # Move models to GPU if CUDA is available. 
@@ -159,8 +159,8 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     mlflow.log_metrics(stats, i_step)
     
     if int(i_step%last_every)==last_every-1:
-        # mlflow.pytorch.log_model(model,"last",extra_files=["model.py"])
-        torch.save(model, "model_last.pth")
+        mlflow.pytorch.log_model(model,"last",extra_files=["model.py"])
+        # torch.save(model, "model_last.pth")
     
 
     # Save the weights.
@@ -206,7 +206,7 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     #     model.train()
             
             
-
+mlflow.pytorch.log_model(model,"final",extra_files=["model.py"])
             
     
     
