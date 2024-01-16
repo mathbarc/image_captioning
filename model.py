@@ -129,9 +129,8 @@ class ImageCaptioner(nn.Module):
 
 def get_transform():
     return transforms.Compose([ 
-        # transforms.ColorJitter(0.1,0.1,0.1,0.025),
-        # transforms.GaussianBlur(3,(0.1,2.8)),
-        # transforms.Resize(480,antialias=True),
+        transforms.ColorJitter(0.05,0.05,0.05,0.025),
+        transforms.GaussianBlur(3,(0.1,1.8)),
         RandomResize(348, 512, antialias=True),
         transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
         ])

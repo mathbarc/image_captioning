@@ -1,13 +1,16 @@
 FROM python:3.8.2-slim
 
 RUN apt update;DEBIAN_FRONTEND=noninteractive apt install libavcodec-dev libavformat-dev libavresample-dev libswscale-dev -y; apt clean --dry-run; apt autoclean;
-RUN pip install torch==1.12.0 torchvision==0.13.0 pyTelegramBotAPI numpy opencv-python==4.6.0.66 boto3
+RUN pip install torch==2.0.1 torchvision==0.15.2 numpy opencv-python==4.6.0.66 
+RUN pip install pyTelegramBotAPI boto3 nltk pycocotools
 
-COPY simple_vocab.pkl ./
-COPY models/best/encoder.pth ./models/encoder.pth
-COPY models/best/decoder.pth ./models/decoder.pth
+WORKDIR /home/bot
+
+COPY vocab.pkl ./vocab.pkl
+COPY model.pth ./model.pth
 
 COPY model.py model.py
+COPY vocabulary.py vocabulary.py
 COPY util.py util.py
 COPY bot.py bot.py
 
