@@ -131,8 +131,7 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     captions = captions.to(device)
     
     # Zero the gradients.
-    model.encoder.zero_grad()
-    model.decoder.zero_grad()
+    optimizer.zero_grad()
     
     # Pass the inputs through the CNN-RNN model.
     output = model(images, captions)
@@ -179,7 +178,7 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
         count = 0
         
         with torch.no_grad():
-            hidden_val = model.decoder.init_hidden(batch_size)
+
             for images, captions in tqdm.tqdm(data_loader_valid.dataset):
 
                 images = transform_valid(images)
@@ -187,7 +186,7 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
                 images = images.to(device)
                 captions = captions.to(device)
 
-                output, hidden_val = model(images, captions, hidden_val)
+                output = model(images, captions)
                 
                 # Calculate the batch loss.
                 loss = criterion(output.view(-1, vocab_size), captions.view(-1))
