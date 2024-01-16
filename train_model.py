@@ -1,5 +1,4 @@
-import os
-import sys
+import time
 import math
 import numpy as np
 
@@ -19,7 +18,6 @@ batch_size = 64          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = False    # if True, load existing vocab file
 num_epochs = 30             # number of training epochs
-save_every = 1000             # determines frequency of saving model weights
 num_layers = 2
 lr = 1e-3
 last_every = 100
@@ -43,6 +41,8 @@ data_loader_valid = get_loader(mode='valid',
                          vocab_from_file=True,
                          num_workers=8)
 
+epoch_size = math.ceil(len(data_loader.dataset.caption_lengths) / batch_size)
+save_every = epoch_size             # determines frequency of saving model weights
 
 # The size of the vocabulary.
 vocab_size = len(data_loader.dataset.vocab)
@@ -148,62 +148,70 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     optimizer.step()
     if scheduler is not None:
         scheduler.step()
-        
-    
-    
-    if scheduler is not None:
         current_lr = scheduler.get_last_lr()[0]
     else:
         current_lr = lr
+
     stats = {"loss": acc_loss, "lr":current_lr}
-    mlflow.log_metrics(stats, i_step)
+
+    try:
+        mlflow.log_metrics(stats, i_step)
+    except mlflow.MlflowException as e:
+        print(e.message)
     
     if int(i_step%last_every)==last_every-1:
-        mlflow.pytorch.log_model(model,"last",extra_files=["model.py"])
-        # torch.save(model, "model_last.pth")
+        continue_uploading = True
+        while continue_uploading:
+            try:
+                mlflow.pytorch.log_model(model,"last",extra_files=["model.py"])
+                continue_uploading = False
+            except mlflow.MlflowException as e:
+                print(e.message)
+                time.sleep(5)
     
 
     # Save the weights.
-    # if (i_step-1)%save_every == save_every - 1:
+    if (i_step-1)%save_every == save_every - 1:
 
-    #     hidden_val = model.decoder.init_hidden(batch_size)
-    #     # torch.save(model, os.path.join('./models', 'image_captioner-%d.pkl' % epoch))
+        model.eval()
 
-    #     model.eval()
-
-    #     acc_test_loss = 0
-    #     count = 0
-    #     for i in tqdm.tqdm(range(0,100)):
-
-    #         # Randomly sample a caption length, and sample indices with that length.
-    #         indices = data_loader_valid.dataset.get_train_indices()
-    #         # Create and assign a batch sampler to retrieve a batch with the sampled indices.
-    #         new_sampler = data.sampler.SubsetRandomSampler(indices=indices)
-    #         data_loader_valid.batch_sampler.sampler = new_sampler
-
-    #         images, captions = next(iter(data_loader_valid))
-    #         images = transform_valid(images)
-
-    #         images = images.to(device)
-    #         captions = captions.to(device)
-
-    #         output, hidden_val = model(images, captions, hidden_val)
-    #         hidden_val = model.decoder.repackage_hidden(hidden_val)
-            
-    #         # Calculate the batch loss.
-    #         loss = criterion(output.view(-1, vocab_size), captions.view(-1))
-    #         acc_test_loss += loss.item()
-    #         count+=1
+        acc_test_loss = 0
+        count = 0
         
-    #     acc_test_loss = acc_test_loss/count
-    #     stats = {"loss_valid": acc_test_loss}
-    #     mlflow.log_metrics(stats, i_step)
+        with torch.no_grad():
+            hidden_val = model.decoder.init_hidden(batch_size)
+            for images, captions in tqdm.tqdm(data_loader_valid.dataset):
 
-    #     if best_loss > acc_test_loss:
-    #         best_loss = acc_test_loss
-    #         mlflow.pytorch.log_model(model,"best",extra_files=["model.py"])
+                images = transform_valid(images)
 
-    #     model.train()
+                images = images.to(device)
+                captions = captions.to(device)
+
+                output, hidden_val = model(images, captions, hidden_val)
+                
+                # Calculate the batch loss.
+                loss = criterion(output.view(-1, vocab_size), captions.view(-1))
+                acc_test_loss += loss.item()
+                count+=1
+            
+        acc_test_loss = acc_test_loss/count
+        stats = {"loss_valid": acc_test_loss}
+        mlflow.log_metrics(stats, i_step)
+
+        if best_loss > acc_test_loss:
+            best_loss = acc_test_loss
+            
+            continue_uploading = True
+            while continue_uploading:
+                try:
+                    mlflow.pytorch.log_model(model,"best",extra_files=["model.py"])
+                    continue_uploading = False
+                except mlflow.MlflowException as e:
+                    print(e.message)
+                    time.sleep(5)
+        
+
+        model.train()
             
             
 mlflow.pytorch.log_model(model,"final",extra_files=["model.py"])
