@@ -12,13 +12,15 @@ from data_loader import get_loader
 from model import ImageCaptioner, get_transform, get_inference_transform
 import mlflow
 
+import schedulers
+
 
 ## TODO #1: Select appropriate values for the Python variables below.
 batch_size = 64          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = False    # if True, load existing vocab file
-num_epochs = 30             # number of training epochs
-num_layers = 2
+num_epochs = 10             # number of training epochs
+num_layers = 1
 lr = 1e-3
 last_every = 100
 opt_name = "adam"
@@ -41,13 +43,14 @@ data_loader_valid = get_loader(mode='valid',
                          vocab_from_file=True,
                          num_workers=8)
 
-epoch_size = math.ceil(len(data_loader.dataset.caption_lengths) / batch_size)
-save_every = epoch_size             # determines frequency of saving model weights
+
+save_every = 1000
 
 # The size of the vocabulary.
 vocab_size = len(data_loader.dataset.vocab)
 embed_size = 256           # dimensionality of image and word embeddings
-hidden_size = 256         # number of features in hidden state of the RNN decoder
+hidden_size = 512         # number of features in hidden state of the RNN decoder
+total_step = 10000
 training_params = {"opt":opt_name,
                    "scheduler":scheduler_name, 
                    "num_layers":num_layers, 
@@ -57,7 +60,7 @@ training_params = {"opt":opt_name,
                    "embed_size":embed_size, 
                    "hidden_size":hidden_size, 
                    "dropout": dropout,
-                   "num_epochs":num_epochs, 
+                   "steps":total_step, 
                    "vocab_size":vocab_size}
 
 # Initialize the encoder and decoder. 
@@ -81,7 +84,7 @@ params = model.parameters()
 
 
 # Set the total number of training steps per epoch.
-total_step = math.ceil(len(data_loader.dataset.caption_lengths) / batch_size) * num_epochs
+
 # total_step = 2000
 
 mlflow.set_tracking_uri("http://mlflow.cluster.local")
@@ -104,12 +107,12 @@ elif opt_name == "asgd":
 elif opt_name == "rprop":
     optimizer = torch.optim.Rprop(params,lr)
 
-if scheduler_name == "step":
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, int(total_step/10), 0.1)
+if scheduler_name == "logistic":
+    scheduler = schedulers.RampUpLogisticDecayScheduler(optimizer, lr, 1e-5, total_step, 1000)
 elif scheduler_name == "cosine_annealing":
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_step)
+    scheduler = schedulers.RampUpCosineAnnealingScheduler(optimizer, lr, 1e-5, 1000, 1000,2)
 elif scheduler_name == "constant":
-    scheduler = None
+    scheduler = schedulers.RampUpScheduler(optimizer, lr, 1000)
 
 acc_loss = 0
 best_loss = 100
@@ -147,7 +150,7 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     optimizer.step()
     if scheduler is not None:
         scheduler.step()
-        current_lr = scheduler.get_last_lr()[0]
+        current_lr = scheduler.get_last_lr()
     else:
         current_lr = lr
 
@@ -182,6 +185,8 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
             for images, captions in tqdm.tqdm(data_loader_valid.dataset):
 
                 images = transform_valid(images)
+                images = images.unsqueeze(0)
+                captions = captions.unsqueeze(0)
 
                 images = images.to(device)
                 captions = captions.to(device)
