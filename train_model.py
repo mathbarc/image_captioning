@@ -24,7 +24,7 @@ num_layers = 1
 lr = 1e-3
 last_every = 100
 opt_name = "adam"
-scheduler_name = "cosine_annealing"
+scheduler_name = "logistic"
 dropout = 0.4
 
 transform_train = get_transform()
