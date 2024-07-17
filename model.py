@@ -142,9 +142,17 @@ def get_inference_transform():
         ])
 
 if __name__=="__main__":
-    cnn = ImageCaptioner(1024, 1024, 4532, 2)
+    cnn = ImageCaptioner(1024, 1024, 4532, 2).cuda()
 
     print(cnn)
     torch.save(cnn, "sample.pth")
+    
+    input = torch.ones((1,3,480,480))
+    trans = get_inference_transform()
+    
+    input = trans(input).cuda()
+    captions = torch.ones((1,18)).long().cuda()
+    
+    torch.onnx.export(cnn,{"images":input, "captions":captions},"sample.onnx")
 
     
