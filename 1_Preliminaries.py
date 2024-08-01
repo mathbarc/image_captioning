@@ -9,7 +9,7 @@ import numpy as np
 import torch.utils.data as data
 from model import EncoderCNN
 import torch
-from model import DecoderRNN
+from model import ImageCaptionerHead
 
 nltk.download('punkt')
 # Define a transform to pre-process the training images.
@@ -86,7 +86,7 @@ hidden_size = 256
 vocab_size = len(data_loader.dataset.vocab)
 
 # Initialize the decoder.
-decoder = DecoderRNN(embed_size, hidden_size, vocab_size)
+decoder = ImageCaptionerHead(embed_size, hidden_size, vocab_size)
 
 # Move the decoder to GPU if CUDA is available.
 decoder.to(device)

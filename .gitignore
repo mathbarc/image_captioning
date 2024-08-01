@@ -6,3 +6,4 @@ training_log.txt
 tokenizers
 **.pth
 **.onnx
+mlruns/

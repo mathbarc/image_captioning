@@ -104,6 +104,7 @@ class CoCoDataset(data.Dataset):
         self.batch_size = batch_size
         self.vocab = Vocabulary(vocab_threshold, vocab_file, start_word,
             end_word, unk_word, annotations_file, vocab_from_file)
+        
         self.img_folder = img_folder
         if not os.path.exists(self.img_folder):
             os.makedirs(self.img_folder)

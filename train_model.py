@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.utils.data as data
 from torchvision import transforms
+from torchmetrics import Accuracy
 import tqdm
 
 from data_loader import get_loader
@@ -19,12 +20,11 @@ import schedulers
 batch_size = 64          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = False    # if True, load existing vocab file
-num_epochs = 10             # number of training epochs
-num_layers = 1
+
 lr = 1e-3
 last_every = 100
 opt_name = "adam"
-scheduler_name = "logistic"
+scheduler_name = "cosine"
 dropout = 0.4
 
 transform_train = get_transform()
@@ -44,13 +44,14 @@ data_loader_valid = get_loader(mode='valid',
                          num_workers=8)
 
 
-save_every = 1000
+save_every = 500
 
 # The size of the vocabulary.
 vocab_size = len(data_loader.dataset.vocab)
-embed_size = 256           # dimensionality of image and word embeddings
-hidden_size = 512         # number of features in hidden state of the RNN decoder
-total_step = 10000
+embed_size = 1024          # dimensionality of image and word embeddings
+hidden_size = 256         # number of features in hidden state of the RNN decoder
+num_layers = 1
+total_step = 100000
 training_params = {"opt":opt_name,
                    "scheduler":scheduler_name, 
                    "num_layers":num_layers, 
@@ -64,7 +65,7 @@ training_params = {"opt":opt_name,
                    "vocab_size":vocab_size}
 
 # Initialize the encoder and decoder. 
-model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, pretreined=False)
+model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, max_len=max(data_loader.dataset.caption_lengths))
 model.train()
 
 # Move models to GPU if CUDA is available. 
@@ -76,7 +77,12 @@ model.to(device)
 # decoder.load_state_dict(torch.load(os.path.join('./models/decoder-4.pkl'),map_location=device))
 
 # Define the loss function. 
-criterion = nn.CrossEntropyLoss().cuda() if torch.cuda.is_available() else nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss()
+eval_criterion = Accuracy(task="multiclass", num_classes=vocab_size)
+
+if torch.cuda.is_available():
+    criterion = criterion.cuda()
+    eval_criterion = eval_criterion.cuda()
 
 # TODO #3: Specify the learnable parameters of the model.
 # params = list(model.encoder.parameters())+list(model.decoder.parameters())
@@ -87,7 +93,7 @@ params = model.parameters()
 
 # total_step = 2000
 
-mlflow.set_tracking_uri("http://mlflow.cluster.local")
+# mlflow.set_tracking_uri("http://mlflow.cluster.local")
 experiment = mlflow.get_experiment_by_name("Image Captioning")
 if experiment is None:
     experiment_id = mlflow.create_experiment("Image Captioning")
@@ -95,7 +101,7 @@ else:
     experiment_id = experiment.experiment_id
 mlflow.start_run(experiment_id=experiment_id)
 mlflow.log_params(training_params)
-mlflow.log_artifact("./vocab.pkl")
+mlflow.log_artifact("simple_vocab.pkl")
 
 
 if opt_name == "adam":
@@ -109,13 +115,15 @@ elif opt_name == "rprop":
 
 if scheduler_name == "logistic":
     scheduler = schedulers.RampUpLogisticDecayScheduler(optimizer, lr, 1e-5, total_step, 1000)
+if scheduler_name == "cosine":
+    scheduler = schedulers.RampUpCosineDecayScheduler(optimizer, lr, 1e-5, total_step, 1000)
 elif scheduler_name == "cosine_annealing":
     scheduler = schedulers.RampUpCosineAnnealingScheduler(optimizer, lr, 1e-5, 1000, 1000,2)
 elif scheduler_name == "constant":
     scheduler = schedulers.RampUpScheduler(optimizer, lr, 1000)
 
 acc_loss = 0
-best_loss = 100
+best_loss = 0
 
 for i_step in tqdm.tqdm(range(1, total_step+1)):
 
@@ -137,7 +145,7 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     optimizer.zero_grad()
     
     # Pass the inputs through the CNN-RNN model.
-    output = model(images, captions)
+    output = model.compute_gradients(images, captions)
     
     # Calculate the batch loss.
     loss = criterion(output.view(-1, vocab_size), captions.view(-1))
@@ -165,7 +173,9 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
         continue_uploading = True
         while continue_uploading:
             try:
-                mlflow.pytorch.log_model(model,"last",extra_files=["model.py"])
+                # mlflow.pytorch.log_model(model,"last",extra_files=["model.py"])
+                model.save("last")
+                mlflow.log_artifact("last.onnx")
                 continue_uploading = False
             except mlflow.MlflowException as e:
                 print(e.message)
@@ -191,24 +201,31 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
                 images = images.to(device)
                 captions = captions.to(device)
 
-                output = model(images, captions)
+                output = model(images)
+                
+                if output.shape[1] < captions.shape[1]:
+                    captions = captions[:,:output.shape[1]]
+                elif output.shape[1] > captions.shape[1]:
+                    output = output[:,:captions.shape[1]]
                 
                 # Calculate the batch loss.
-                loss = criterion(output.view(-1, vocab_size), captions.view(-1))
-                acc_test_loss += loss.item()
+                acc = eval_criterion(output, captions)
+                acc_test_loss += acc.item()
                 count+=1
             
         acc_test_loss = acc_test_loss/count
         stats = {"loss_valid": acc_test_loss}
         mlflow.log_metrics(stats, i_step)
 
-        if best_loss > acc_test_loss:
+        if best_loss < acc_test_loss:
             best_loss = acc_test_loss
             
             continue_uploading = True
             while continue_uploading:
                 try:
-                    mlflow.pytorch.log_model(model,"best",extra_files=["model.py"])
+                    # mlflow.pytorch.log_model(model,"best",extra_files=["model.py"])
+                    model.save("best")
+                    mlflow.log_artifact("best.onnx")
                     continue_uploading = False
                 except mlflow.MlflowException as e:
                     print(e.message)
@@ -218,7 +235,9 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
         model.train()
             
             
-mlflow.pytorch.log_model(model,"final",extra_files=["model.py"])
+# mlflow.pytorch.log_model(model,"final",extra_files=["model.py"])
+model.save("final")
+mlflow.log_artifact("final.onnx")
             
     
     
