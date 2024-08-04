@@ -63,7 +63,7 @@ class EfficientNetV2Backbone(nn.Module):
         self.cnn = nn.Sequential()
         self.cnn.add_module("backbone", nn.Sequential(*(modules[:-1])))
 
-        self.neck = ImageCaptionerNeck(modules[2][0].in_features, embed_size)
+        self.neck = ImageCaptionerNeck(modules[2][-1].in_features, embed_size)
     
     def forward(self, image):
         x = self.cnn(image)
@@ -176,9 +176,15 @@ class ImageCaptionerHead(nn.Module):
     
 
 class ImageCaptioner(nn.Module):
-    def __init__(self, embed_size:int, hidden_size:int, vocab_size:int, num_layers:int=1, dropout=0.2, max_len=20) -> None:
+    def __init__(self, backbone_type:str, embed_size:int, hidden_size:int, vocab_size:int, num_layers:int=1, dropout=0.2, max_len=20) -> None:
         super().__init__()
-        self.encoder = ImageCaptionerBackbone(embed_size)
+        
+        if backbone_type == "mobilenet":
+            self.encoder = MobileNetV3Backbone(embed_size, False)
+        elif backbone_type == "efficientnet_v2":
+            self.encoder = EfficientNetV2Backbone(embed_size, False)
+        else:
+            self.encoder = ImageCaptionerBackbone(embed_size)
         self.decoder = ImageCaptionerHead(embed_size, hidden_size, vocab_size, num_layers, dropout)
         self.embed = nn.Embedding(vocab_size, embed_size)
         

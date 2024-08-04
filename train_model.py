@@ -17,15 +17,16 @@ import schedulers
 
 
 ## TODO #1: Select appropriate values for the Python variables below.
-batch_size = 64          # batch size
+batch_size = 8          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = False    # if True, load existing vocab file
 
 lr = 1e-3
 last_every = 100
 opt_name = "adam"
-scheduler_name = "cosine"
+scheduler_name = "logistic"
 dropout = 0.4
+backbone_type = "efficientnet_v2"
 
 transform_train = get_transform()
 
@@ -62,10 +63,11 @@ training_params = {"opt":opt_name,
                    "hidden_size":hidden_size, 
                    "dropout": dropout,
                    "steps":total_step, 
-                   "vocab_size":vocab_size}
+                   "vocab_size":vocab_size,
+                   "backbone_type":backbone_type}
 
 # Initialize the encoder and decoder. 
-model = ImageCaptioner(embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, max_len=max(data_loader.dataset.caption_lengths))
+model = ImageCaptioner(backbone_type,embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, max_len=max(data_loader.dataset.caption_lengths))
 model.train()
 
 # Move models to GPU if CUDA is available. 

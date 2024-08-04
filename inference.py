@@ -6,7 +6,7 @@ import pickle
 
 
 def infer_complete(blob):
-    model = cv2.dnn.readNetFromONNX("mlruns/613000375512790258/31f32b8c88b84ad7acb1764ca1acb32b/artifacts/last.onnx")
+    model = cv2.dnn.readNetFromONNX("mlruns/613000375512790258/31f32b8c88b84ad7acb1764ca1acb32b/artifacts/best.onnx")
     model.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
     model.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
     
