@@ -7,12 +7,14 @@ from torchvision.ops import Conv2dNormActivation
 
 
 def create_encoder(embed_size, dropout = 0.2, pretrained=True):
-    backbone = models.mobilenet_v3_small(models.MobileNet_V3_Small_Weights.DEFAULT)
-    for param in backbone.parameters():
-        param.requires_grad_(not pretrained)
-    
+    if pretrained:
+        backbone = models.mobilenet_v3_small(models.MobileNet_V3_Small_Weights.DEFAULT)
+        for param in backbone.parameters():
+            param.requires_grad_(not pretrained)
+    else:
+        backbone = models.mobilenet_v3_small()
+        
     modules = list(backbone.children())
-
 
     cnn = nn.Sequential()
     cnn.add_module("backbone", nn.Sequential(*(modules[:-1])))
@@ -34,9 +36,12 @@ class MobileNetV3Backbone(nn.Module):
     def __init__(self, embed_size, pretrained=True, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         
-        backbone = models.mobilenet_v3_small(models.MobileNet_V3_Small_Weights.DEFAULT)
-        for param in backbone.parameters():
-            param.requires_grad_(not pretrained)
+        if pretrained:
+            backbone = models.mobilenet_v3_small(models.MobileNet_V3_Small_Weights.DEFAULT)
+            for param in backbone.parameters():
+                param.requires_grad_(not pretrained)
+        else:
+            backbone = models.mobilenet_v3_small()
         
         modules = list(backbone.children())
 
@@ -180,9 +185,9 @@ class ImageCaptioner(nn.Module):
         super().__init__()
         
         if backbone_type == "mobilenet":
-            self.encoder = MobileNetV3Backbone(embed_size, False)
+            self.encoder = MobileNetV3Backbone(embed_size)
         elif backbone_type == "efficientnet_v2":
-            self.encoder = EfficientNetV2Backbone(embed_size, False)
+            self.encoder = EfficientNetV2Backbone(embed_size)
         else:
             self.encoder = ImageCaptionerBackbone(embed_size)
         self.decoder = ImageCaptionerHead(embed_size, hidden_size, vocab_size, num_layers, dropout)

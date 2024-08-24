@@ -17,7 +17,7 @@ import schedulers
 
 
 ## TODO #1: Select appropriate values for the Python variables below.
-batch_size = 8          # batch size
+batch_size = 64          # batch size
 vocab_threshold = 20        # minimum word count threshold
 vocab_from_file = False    # if True, load existing vocab file
 
@@ -49,8 +49,8 @@ save_every = 500
 
 # The size of the vocabulary.
 vocab_size = len(data_loader.dataset.vocab)
-embed_size = 1024          # dimensionality of image and word embeddings
-hidden_size = 256         # number of features in hidden state of the RNN decoder
+embed_size = 2048          # dimensionality of image and word embeddings
+hidden_size = 512         # number of features in hidden state of the RNN decoder
 num_layers = 1
 total_step = 100000
 training_params = {"opt":opt_name,
