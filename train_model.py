@@ -24,7 +24,7 @@ vocab_from_file = False    # if True, load existing vocab file
 lr = 1e-3
 last_every = 100
 opt_name = "adam"
-scheduler_name = "logistic"
+scheduler_name = "cosine"
 dropout = 0.4
 backbone_type = "efficientnet_v2"
 
@@ -45,14 +45,15 @@ data_loader_valid = get_loader(mode='valid',
                          num_workers=8)
 
 
-save_every = 500
+save_every = 2000
 
 # The size of the vocabulary.
 vocab_size = len(data_loader.dataset.vocab)
 embed_size = 2048          # dimensionality of image and word embeddings
 hidden_size = 512         # number of features in hidden state of the RNN decoder
 num_layers = 1
-total_step = 100000
+total_step = 5000
+rampup_period = 100
 training_params = {"opt":opt_name,
                    "scheduler":scheduler_name, 
                    "num_layers":num_layers, 
@@ -64,7 +65,8 @@ training_params = {"opt":opt_name,
                    "dropout": dropout,
                    "steps":total_step, 
                    "vocab_size":vocab_size,
-                   "backbone_type":backbone_type}
+                   "backbone_type":backbone_type,
+                   "rampup_period":rampup_period}
 
 # Initialize the encoder and decoder. 
 model = ImageCaptioner(backbone_type,embed_size, hidden_size, vocab_size, num_layers, dropout=dropout, max_len=max(data_loader.dataset.caption_lengths))
@@ -95,7 +97,7 @@ params = model.parameters()
 
 # total_step = 2000
 
-# mlflow.set_tracking_uri("http://mlflow.cluster.local")
+mlflow.set_tracking_uri("http://mlflow.cluster.local")
 experiment = mlflow.get_experiment_by_name("Image Captioning")
 if experiment is None:
     experiment_id = mlflow.create_experiment("Image Captioning")
@@ -116,13 +118,13 @@ elif opt_name == "rprop":
     optimizer = torch.optim.Rprop(params,lr)
 
 if scheduler_name == "logistic":
-    scheduler = schedulers.RampUpLogisticDecayScheduler(optimizer, lr, 1e-5, total_step, 1000)
+    scheduler = schedulers.RampUpLogisticDecayScheduler(optimizer, lr, 1e-4, total_step, rampup_period, 1e-5)
 if scheduler_name == "cosine":
-    scheduler = schedulers.RampUpCosineDecayScheduler(optimizer, lr, 1e-5, total_step, 1000)
+    scheduler = schedulers.RampUpCosineDecayScheduler(optimizer, lr, 1e-4, total_step, rampup_period, 1e-5)
 elif scheduler_name == "cosine_annealing":
-    scheduler = schedulers.RampUpCosineAnnealingScheduler(optimizer, lr, 1e-5, 1000, 1000,2)
+    scheduler = schedulers.RampUpCosineAnnealingScheduler(optimizer, lr, 1e-4, rampup_period, 1000,2, 1e-5)
 elif scheduler_name == "constant":
-    scheduler = schedulers.RampUpScheduler(optimizer, lr, 1000)
+    scheduler = schedulers.RampUpScheduler(optimizer, lr, rampup_period, 1e-6)
 
 acc_loss = 0
 best_loss = 0

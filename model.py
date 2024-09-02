@@ -306,12 +306,6 @@ class ImageCaptioner(nn.Module):
                               "output":{0:"batch_size"}}
             )
         
-        
-        
-
-        
-        
-
 
 def get_transform():
     return transforms.Compose([ 

@@ -3,10 +3,12 @@ import math
 
 
 class RampUpScheduler:
-    def __init__(self, optimizer:torch.optim.Optimizer, lr:float, rampup_period:int, power:int = 4):
+    def __init__(self, optimizer:torch.optim.Optimizer, lr:float, rampup_period:int, lr_minimum:float = 1e-8, power:int = 4):
         self._optimizer = optimizer
         
         self._lr_base = lr
+        self._lr_rampup_minimum = lr_minimum
+        self._lr_rampup_magnitude = lr-lr_minimum
         self._current_step = 0
         
         self._rampup_period = rampup_period
@@ -27,7 +29,7 @@ class RampUpScheduler:
             lr = self._computer_lr()
             
         elif self._current_step <= self._rampup_period:
-            lr = self._lr_base * pow((self._current_step / self._rampup_period), self._power)
+            lr = self._lr_rampup_minimum + (self._lr_rampup_magnitude * pow((self._current_step / self._rampup_period), self._power))
             
         return lr
     
@@ -35,8 +37,8 @@ class RampUpScheduler:
         return self._lr_base
  
 class RampUpExponentialDecayScheduler(RampUpScheduler):
-    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, n_steps:int, rampup_period:int, power:int=4):
-        super().__init__(optimizer, lr_base, rampup_period, power)
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, n_steps:int, rampup_period:int, lr_minimum:float = 1e-8, power:int=4):
+        super().__init__(optimizer, lr_base, rampup_period, lr_minimum, power)
         
         self._decay_period = n_steps-rampup_period
         self._decay_amplitude = self._lr_base - lr_final
@@ -46,8 +48,8 @@ class RampUpExponentialDecayScheduler(RampUpScheduler):
         return self._lr_final + self._decay_amplitude * pow(((self._decay_period-(self._current_step-self._rampup_period)) / self._decay_period), self._power)
     
 class RampUpCosineDecayScheduler(RampUpScheduler):
-    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, n_steps:int, rampup_period:int, power:int=4):
-        super().__init__(optimizer, lr_base, rampup_period, power)
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, n_steps:int, rampup_period:int, lr_minimum:float = 1e-8, power:int=4):
+        super().__init__(optimizer, lr_base, rampup_period, lr_minimum, power)
         
         self._decay_period = n_steps-rampup_period
         self._decay_amplitude = self._lr_base - lr_final
@@ -57,8 +59,8 @@ class RampUpCosineDecayScheduler(RampUpScheduler):
         return self._lr_final + self._decay_amplitude * math.sin((math.pi/2)*((self._current_step-self._rampup_period)/self._decay_period)+(math.pi/2))
 
 class RampUpLogisticDecayScheduler(RampUpScheduler):
-    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, n_steps:int, rampup_period:int, power:int=4):
-        super().__init__(optimizer, lr_base, rampup_period, power)
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, n_steps:int, rampup_period:int, lr_minimum:float = 1e-8, power:int=4):
+        super().__init__(optimizer, lr_base, rampup_period, lr_minimum, power)
         
         self._decay_period = n_steps-rampup_period
         self._decay_amplitude = self._lr_base - lr_final
@@ -75,8 +77,8 @@ class RampUpLogisticDecayScheduler(RampUpScheduler):
         return lr
 
 class RampUpCosineAnnealingScheduler(RampUpScheduler):
-    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, rampup_period:int, cosine_period:int, cosine_period_inc:float, power:int=4):
-        super().__init__(optimizer, lr_base, rampup_period, power)
+    def __init__(self, optimizer:torch.optim.Optimizer, lr_base:float, lr_final:float, rampup_period:int, cosine_period:int, cosine_period_inc:float, lr_minimum:float = 1e-8, power:int=4):
+        super().__init__(optimizer, lr_base, rampup_period, lr_minimum, power)
         
         self._cosine_period = cosine_period
         self._cosine_period_inc = cosine_period_inc
@@ -108,9 +110,9 @@ if __name__=="__main__":
     # scheduler = RampUpScheduler(None, lr, lr_ramp_down)
     # scheduler = RampUpCosineDecayScheduler(None, lr, 1e-8, steps, lr_ramp_down)
     # scheduler = RampUpExponentialDecayScheduler(None, lr, 1e-8, steps, lr_ramp_down)
-    # scheduler = RampUpLogisticDecayScheduler(None, lr, 1e-8, steps, lr_ramp_down)
+    scheduler = RampUpLogisticDecayScheduler(None, lr, 1e-8, steps, lr_ramp_down)
     
-    scheduler = RampUpCosineAnnealingScheduler(None, lr, 1e-8, lr_ramp_down, 1000, 2, 4)
+    # scheduler = RampUpCosineAnnealingScheduler(None, lr, 1e-8, lr_ramp_down, 1000, 2, 4)
 
     lrs = []
     for i in range(steps):
@@ -118,5 +120,6 @@ if __name__=="__main__":
         scheduler._current_step+=1
         lrs.append(lr)
         
+    print(lrs[0], lrs[-1])
     matplotlib.pyplot.plot(lrs)
     matplotlib.pyplot.show()

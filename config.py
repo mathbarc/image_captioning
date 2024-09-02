@@ -1,2 +1,2 @@
-DATA_DIR = '/data/hd1/Dataset/Coco/'
+DATA_DIR = '/data/ssd1/Datasets/Coco/'
 NLTK_DIR = './nltk_data'

@@ -6,11 +6,11 @@ import pickle
 
 
 def infer_complete(blob):
-    model = cv2.dnn.readNetFromONNX("mlruns/613000375512790258/31f32b8c88b84ad7acb1764ca1acb32b/artifacts/best.onnx")
-    model.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-    model.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+    model = cv2.dnn.readNetFromONNX("best.onnx")
+    model.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+    model.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
     
-    with open("mlruns/613000375512790258/31f32b8c88b84ad7acb1764ca1acb32b/artifacts/simple_vocab.pkl","rb") as file:
+    with open("simple_vocab.pkl","rb") as file:
         dictionary = pickle.load(file)
     
     
@@ -67,7 +67,7 @@ def infer_subcomponent(blob):
 
 if __name__=="__main__":
     
-    img = cv2.imread("/data/hd1/Dataset/Coco/test2017/000000000001.jpg")
+    img = cv2.imread("/data/ssd1/Datasets/Coco/test2017/000000015378.jpg")
 
     blob = cv2.dnn.blobFromImage(img, 1/255, (480,480),swapRB=True)
     
