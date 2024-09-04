@@ -1,5 +1,8 @@
+from typing import Dict
 import torch
 import math
+
+from torch.optim.optimizer import Optimizer
 
 
 class RampUpScheduler:
@@ -97,6 +100,29 @@ class RampUpCosineAnnealingScheduler(RampUpScheduler):
             self._cosine_period *= self._cosine_period_inc
         return lr
 
+class RampUpSteps(RampUpScheduler):
+    
+    def __init__(self, optimizer: Optimizer, lrs: Dict[int,float], rampup_period: int, lr_minimum: float = 1e-8, power: int = 4):
+        self.lrs = lrs
+        lr = lrs[min(lrs.keys())]
+        super().__init__(optimizer, lr, rampup_period, lr_minimum, power)
+        
+    def _computer_lr(self):
+        
+        keys = list(self.lrs.keys())
+        
+        i=0
+        while i < len(keys):
+            if keys[i]>self._current_step:
+                break
+            i+=1
+        
+        if i == len(keys):
+            i-=1
+        
+        return self.lrs[keys[i]]
+
+
 if __name__=="__main__":
     import matplotlib
     import matplotlib.pyplot
@@ -104,14 +130,14 @@ if __name__=="__main__":
     lr = 1e-3
     epochs = 1000
     lr_ramp_down = 1000
-    steps = epochs*100
+    steps = 10000
 
     
     # scheduler = RampUpScheduler(None, lr, lr_ramp_down)
     # scheduler = RampUpCosineDecayScheduler(None, lr, 1e-8, steps, lr_ramp_down)
     # scheduler = RampUpExponentialDecayScheduler(None, lr, 1e-8, steps, lr_ramp_down)
-    scheduler = RampUpLogisticDecayScheduler(None, lr, 1e-8, steps, lr_ramp_down)
-    
+    # scheduler = RampUpLogisticDecayScheduler(None, lr, 1e-8, steps, lr_ramp_down)
+    scheduler = RampUpSteps(None, {1000:1e-3, 5000:5e-4, 10000:1e-4},100)
     # scheduler = RampUpCosineAnnealingScheduler(None, lr, 1e-8, lr_ramp_down, 1000, 2, 4)
 
     lrs = []

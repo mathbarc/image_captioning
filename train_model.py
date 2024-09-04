@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.utils.data as data
 from torchvision import transforms
-from torchmetrics import Accuracy
+from torchmetrics import Accuracy, JaccardIndex
 import tqdm
 
 from data_loader import get_loader
@@ -24,9 +24,9 @@ vocab_from_file = False    # if True, load existing vocab file
 lr = 1e-3
 last_every = 100
 opt_name = "adam"
-scheduler_name = "cosine"
+scheduler_name = "steps"
 dropout = 0.4
-backbone_type = "efficientnet_v2"
+backbone_type = "yolov2"
 
 transform_train = get_transform()
 
@@ -49,10 +49,10 @@ save_every = 2000
 
 # The size of the vocabulary.
 vocab_size = len(data_loader.dataset.vocab)
-embed_size = 2048          # dimensionality of image and word embeddings
+embed_size = 512          # dimensionality of image and word embeddings
 hidden_size = 512         # number of features in hidden state of the RNN decoder
 num_layers = 1
-total_step = 5000
+total_step = 50000
 rampup_period = 100
 training_params = {"opt":opt_name,
                    "scheduler":scheduler_name, 
@@ -82,7 +82,9 @@ model.to(device)
 
 # Define the loss function. 
 criterion = nn.CrossEntropyLoss()
-eval_criterion = Accuracy(task="multiclass", num_classes=vocab_size)
+# criterion = nn.MultiLabelSoftMarginLoss()
+# eval_criterion = Accuracy(task="multiclass", num_classes=vocab_size)
+eval_criterion = JaccardIndex(task="multiclass", num_classes=vocab_size)
 
 if torch.cuda.is_available():
     criterion = criterion.cuda()
@@ -125,6 +127,8 @@ elif scheduler_name == "cosine_annealing":
     scheduler = schedulers.RampUpCosineAnnealingScheduler(optimizer, lr, 1e-4, rampup_period, 1000,2, 1e-5)
 elif scheduler_name == "constant":
     scheduler = schedulers.RampUpScheduler(optimizer, lr, rampup_period, 1e-6)
+elif scheduler_name == "steps":
+    scheduler = schedulers.RampUpSteps(optimizer, {5000:1e-3, 12000:5e-4, 24000:1e-4, 40000:5e-5}, rampup_period)
 
 acc_loss = 0
 best_loss = 0
@@ -151,8 +155,12 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     # Pass the inputs through the CNN-RNN model.
     output = model.compute_gradients(images, captions)
     
+    #output = torch.permute(output, (0,2,1))
+    
     # Calculate the batch loss.
-    loss = criterion(output.view(-1, vocab_size), captions.view(-1))
+    # output = output.view(-1, vocab_size)
+    # captions = captions.view(-1)
+    loss = criterion(output.view(-1,vocab_size), captions.view(-1))
     acc_loss = loss.item()
 
     # Backward pass.
@@ -218,7 +226,7 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
                 count+=1
             
         acc_test_loss = acc_test_loss/count
-        stats = {"loss_valid": acc_test_loss}
+        stats = {"jaccard_index_valid": acc_test_loss}
         mlflow.log_metrics(stats, i_step)
 
         if best_loss < acc_test_loss:

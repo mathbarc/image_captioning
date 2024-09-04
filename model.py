@@ -115,6 +115,7 @@ class ImageCaptionerBackbone(nn.Module):
         
         x = self.conv7(x)
         x = self.neck(x)
+        
         return x
     
         
@@ -320,6 +321,10 @@ def get_inference_transform():
         transforms.Resize(480,antialias=True),
         # transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
         ])
+
+
+def jaccard_index():
+    pass
 
 if __name__=="__main__":
     cnn = ImageCaptioner(256, 128, 4532, 1).cuda()
