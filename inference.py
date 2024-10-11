@@ -21,10 +21,26 @@ def infer_complete(blob):
     
     end = time.time()
     
+    tokens_str = [[dictionary["idx2word"][token] for token in response ]for response in tokens]
+    caption = []
+    
+    for img_tokens in tokens_str:
+        for token in img_tokens:
+            if token == "<end>":
+                caption[-1] = caption[-1].lstrip(" ")
+                break
+            elif token == "<start>":
+                caption.append("")
+            elif token in [".",","]:
+                caption[-1] += token
+            else:
+                caption[-1] += " "+token
+    
     print(end-start)
     print(tokens.shape)
     print(tokens)
-    print([[dictionary["idx2word"][token] for token in response ]for response in tokens])
+    print(caption)
+    
     
 
 
@@ -68,12 +84,8 @@ def infer_subcomponent(blob):
 
 if __name__=="__main__":
     
-    img = cv2.imread("/data/ssd1/Datasets/Coco/test2017/000000000001.jpg")
+    img = cv2.imread("/data/ssd1/Datasets/Coco/test2017/000000004366.jpg")
 
     blob = cv2.dnn.blobFromImage(img, 1/255, (480,480),swapRB=True)
-    
-    
-    
-    
     
     infer_complete(blob)

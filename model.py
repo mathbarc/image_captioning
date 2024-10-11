@@ -124,7 +124,7 @@ class ImageCaptionerNeck(nn.Module):
     def __init__(self, input_features:int, embed_size:int, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         
-        self.conv_output = Conv2dNormActivation(input_features, embed_size, 1,activation_layer=None)
+        self.conv_output = torch.nn.Conv2d(input_features, embed_size, 1)
         self.pool = nn.AdaptiveMaxPool2d(1)
         self.flatten = nn.Flatten()
     
@@ -327,7 +327,7 @@ def jaccard_index():
     pass
 
 if __name__=="__main__":
-    cnn = ImageCaptioner(256, 128, 4532, 1).cuda()
+    cnn = ImageCaptioner("darknet",256, 128, 4532, 1).cuda()
 
     print(cnn)
     cnn.save("test")

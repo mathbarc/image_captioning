@@ -26,7 +26,7 @@ last_every = 100
 opt_name = "adam"
 scheduler_name = "steps"
 dropout = 0.4
-backbone_type = "yolov2"
+backbone_type = "efficientnet_v2"
 
 transform_train = get_transform()
 
@@ -45,15 +45,15 @@ data_loader_valid = get_loader(mode='valid',
                          num_workers=8)
 
 
-save_every = 2000
+save_every = 10000
 
 # The size of the vocabulary.
 vocab_size = len(data_loader.dataset.vocab)
 embed_size = 512          # dimensionality of image and word embeddings
 hidden_size = 512         # number of features in hidden state of the RNN decoder
 num_layers = 1
-total_step = 50000
-rampup_period = 100
+total_step = 100000
+rampup_period = 1000
 training_params = {"opt":opt_name,
                    "scheduler":scheduler_name, 
                    "num_layers":num_layers, 
@@ -128,10 +128,12 @@ elif scheduler_name == "cosine_annealing":
 elif scheduler_name == "constant":
     scheduler = schedulers.RampUpScheduler(optimizer, lr, rampup_period, 1e-6)
 elif scheduler_name == "steps":
-    scheduler = schedulers.RampUpSteps(optimizer, {5000:1e-3, 12000:5e-4, 24000:1e-4, 40000:5e-5}, rampup_period)
+    scheduler = schedulers.RampUpSteps(optimizer, {20000:1e-3, 50000:5e-4, 70000:1e-4, 90000:5e-5}, rampup_period)
 
 acc_loss = 0
 best_loss = 0
+
+log_metric_interval = 100
 
 for i_step in tqdm.tqdm(range(1, total_step+1)):
 
@@ -174,12 +176,12 @@ for i_step in tqdm.tqdm(range(1, total_step+1)):
     else:
         current_lr = lr
 
-    stats = {"loss": acc_loss, "lr":current_lr}
-
-    try:
-        mlflow.log_metrics(stats, i_step)
-    except mlflow.MlflowException as e:
-        print(e.message)
+    if int(i_step%log_metric_interval==log_metric_interval-1):
+        stats = {"loss": acc_loss, "lr":current_lr}
+        try:
+            mlflow.log_metrics(stats, i_step)
+        except mlflow.MlflowException as e:
+            print(e.message)
     
     if int(i_step%last_every)==last_every-1:
         continue_uploading = True
