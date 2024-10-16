@@ -2,17 +2,27 @@ import cv2
 import time
 import numpy
 import pickle
+from typing import Tuple
 
 
-
-def infer_complete(blob):
-    model = cv2.dnn.readNetFromONNX("best.onnx")
+def load_model(model_path:str = "best.onnx") -> Tuple[cv2.dnn.Net, float, float, float]:
+    model = cv2.dnn.readNetFromONNX(model_path)
     model.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
     model.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+    gflops = 0
+
+    input_size = (1,3,480,480)
+    gflops = model.getFLOPS(input_size)
+    memory_weights, memory_blobs = model.getMemoryConsumption(input_size)
     
-    with open("simple_vocab.pkl","rb") as file:
-        dictionary = pickle.load(file)
-    
+    return model, gflops*1e-9, memory_weights*1e-6, memory_blobs*1e-6
+
+def load_vocab(vocab_path = "simple_vocab.pkl"):
+    with open(vocab_path,"rb") as file:
+        vocab = pickle.load(file)
+    return vocab
+
+def infer_model(blob, model):
     
     start = time.time()
     
@@ -21,7 +31,10 @@ def infer_complete(blob):
     
     end = time.time()
     
-    tokens_str = [[dictionary["idx2word"][token] for token in response ]for response in tokens]
+    return tokens, end-start
+
+def translate_tokens(tokens, vocab):
+    tokens_str = [[vocab["idx2word"][token] for token in response ]for response in tokens]
     caption = []
     
     for img_tokens in tokens_str:
@@ -36,56 +49,30 @@ def infer_complete(blob):
             else:
                 caption[-1] += " "+token
     
-    print(end-start)
-    print(tokens.shape)
-    print(tokens)
-    print(caption)
+    return caption
     
     
-
-
-def infer_subcomponent(blob):
-    encoder = cv2.dnn.readNetFromONNX("test_encoder.onnx")
-    encoder.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-    encoder.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-
-    embed = cv2.dnn.readNetFromONNX("test_embed.onnx")
-    embed.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-    embed.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-
-    decoder = cv2.dnn.readNetFromONNX("test_decoder.onnx")
-    decoder.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-    decoder.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-
-    start = time.time()
-
-
-    c = numpy.zeros((1, 1, 128))
-    h = numpy.zeros((1, 1, 128))
-
-    tokens = []
-
-
-    encoder.setInput(blob,"images")
-    img_features = encoder.forward("output").reshape(1,1,256)
-
-
-    decoder.setInput(img_features, "embed")
-    decoder.setInput(h, "state_input_h")
-    decoder.setInput(c, "state_input_c")
-
-    token, h, c = decoder.forward(("output", "state_output_h", "state_output_c"))
-
-
-    end = time.time()
-
-    print(end-start)
-
 
 if __name__=="__main__":
     
+    model, gflops, memory_weights, memory_blob = load_model("best.onnx")
+    
+    print(gflops, "GFLOPs")   
+    print(memory_weights, "MB") 
+    print(memory_blob, "MB") 
+    print(memory_weights+memory_blob, "MB") 
+    
     img = cv2.imread("/data/ssd1/Datasets/Coco/test2017/000000004366.jpg")
-
     blob = cv2.dnn.blobFromImage(img, 1/255, (480,480),swapRB=True)
     
-    infer_complete(blob)
+    tokens, infer_time = infer_model(blob, model)
+    print(tokens)
+    
+    vocab = load_vocab("simple_vocab.pkl")
+    translated_tokens = translate_tokens(tokens, vocab)
+    
+    print(translated_tokens)
+    print(infer_time, 's')
+    
+    
+    
