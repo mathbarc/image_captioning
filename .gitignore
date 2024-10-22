@@ -7,3 +7,4 @@ tokenizers
 **.pth
 **.onnx
 mlruns/
+**.csv

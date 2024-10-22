@@ -3,6 +3,7 @@ import pickle
 import os.path
 from pycocotools.coco import COCO
 from collections import Counter
+import json
 
 import util
 
@@ -82,6 +83,12 @@ class Vocabulary(object):
 
             if i % 100000 == 0:
                 print("[%d/%d] Tokenizing captions..." % (i, len(ids)))
+
+        with open("word_count.csv","w") as file:
+            file.write("word;count\n")
+            for word, count in counter.items():
+                file.write(f"\"{word}\";{count}\n")
+
 
         words = [word for word, cnt in counter.items() if cnt >= self.vocab_threshold]
 

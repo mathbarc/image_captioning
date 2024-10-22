@@ -327,9 +327,12 @@ def jaccard_index():
     pass
 
 if __name__=="__main__":
-    cnn = ImageCaptioner("darknet",256, 128, 4532, 1).cuda()
+    embed_size = 512          # dimensionality of image and word embeddings
+    hidden_size = 512         # number of features in hidden state of the RNN decoder
+    num_layers = 1
+    cnn = ImageCaptioner("efficientnet_v2",embed_size, hidden_size, 5359, num_layers).cuda()
 
     print(cnn)
-    cnn.save("test")
+    cnn.save("test", save_subcomponents=True)
 
     
